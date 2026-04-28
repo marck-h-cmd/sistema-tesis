@@ -1,0 +1,247 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enum para estados comunes
+enum EstadoPostulacion {
+  postulado
+  aceptado
+  rechazado
+  en_curso
+  finalizado
+}
+
+enum EstadoTesis {
+  propuesta
+  desarrollo
+  sustentacion
+  culminado
+}
+
+enum RolNombre {
+  admin
+  coordinador
+  asesor
+  estudiante
+  empresa
+}
+
+model Rol {
+  id          Int          @id @default(autoincrement())
+  nombre      RolNombre    @unique
+  descripcion String?
+  usuarios    UsuarioRol[]
+}
+
+model Usuario {
+  id          Int          @id @default(autoincrement())
+  email       String       @unique
+  password    String       @map("password_hash")
+  nombres     String
+  apellidos   String
+  dni         String       @unique
+  telefono    String?
+  activo      Boolean      @default(true)
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+  roles       UsuarioRol[]
+  estudiante  Estudiante?
+  asesor      Asesor?
+  reportes    Reporte[]
+
+  @@map("usuario")
+}
+
+model UsuarioRol {
+  usuario_id  Int
+  rol_id      Int
+  asignado_en DateTime @default(now())
+  usuario     Usuario   @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  rol         Rol       @relation(fields: [rol_id], references: [id])
+
+  @@id([usuario_id, rol_id])
+  @@map("usuario_rol")
+}
+
+model Escuela {
+  id          Int          @id @default(autoincrement())
+  nombre      String
+  facultad    String
+  estudiantes Estudiante[]
+  asesores    Asesor[]
+}
+
+model Estudiante {
+  id                   Int            @id @default(autoincrement())
+  usuario_id           Int            @unique
+  codigo_universitario String         @unique
+  escuela_id           Int
+  ciclo                String?
+  resolucion_practicas String?
+  created_at           DateTime       @default(now())
+  usuario              Usuario        @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  escuela              Escuela        @relation(fields: [escuela_id], references: [id])
+  postulaciones        Postulacion[]
+  tesis                Tesis[]
+
+  @@map("estudiante")
+}
+
+model Asesor {
+  id          Int          @id @default(autoincrement())
+  usuario_id  Int          @unique
+  escuela_id  Int
+  especialidad String?
+  created_at  DateTime     @default(now())
+  usuario     Usuario      @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  escuela     Escuela      @relation(fields: [escuela_id], references: [id])
+  postulaciones AsesorPostulacion[]
+  tesisAsesorPrincipal Tesis[]       @relation("AsesorPrincipal")
+  juradoTesis JuradoTesis[]
+
+  @@map("asesor")
+}
+
+model Empresa {
+  id             Int            @id @default(autoincrement())
+  ruc            String         @unique
+  razon_social   String
+  direccion      String?
+  telefono       String?
+  email_contacto String?
+  representante  String?
+  convenio_activo Boolean        @default(false)
+  created_at     DateTime       @default(now())
+  convenios      Convenio[]
+  ofertas        OfertaPractica[]
+}
+
+model Convenio {
+  id          Int       @id @default(autoincrement())
+  empresa_id  Int
+  fecha_inicio DateTime  @db.Date
+  fecha_fin   DateTime  @db.Date
+  tipo        String    // "marco" o "especifico"
+  archivo_pdf String?   // URL del archivo subido
+  estado      String    @default("vigente")
+  created_at  DateTime  @default(now())
+  empresa     Empresa   @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+}
+
+model OfertaPractica {
+  id          Int            @id @default(autoincrement())
+  empresa_id  Int
+  titulo      String
+  descripcion String
+  requisitos  String?
+  fecha_inicio DateTime       @db.Date
+  fecha_fin   DateTime        @db.Date
+  vacantes    Int
+  modalidad   String          // presencial, remota, hibrida
+  estado      String          @default("abierta")
+  created_at  DateTime        @default(now())
+  empresa     Empresa         @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+  postulaciones Postulacion[]
+}
+
+model Postulacion {
+  id                  Int                @id @default(autoincrement())
+  oferta_id           Int
+  estudiante_id       Int
+  asesor_academico_id Int?
+  fecha_postulacion   DateTime           @default(now()) @db.Date
+  estado              EstadoPostulacion  @default(postulado)
+  created_at          DateTime           @default(now())
+  oferta              OfertaPractica     @relation(fields: [oferta_id], references: [id], onDelete: Cascade)
+  estudiante          Estudiante         @relation(fields: [estudiante_id], references: [id], onDelete: Cascade)
+  asesor_academico    Asesor?            @relation("AsesorPostulacion", fields: [asesor_academico_id], references: [id])
+  seguimiento         SeguimientoPractica?
+}
+
+model AsesorPostulacion {
+  id           Int       @id @default(autoincrement())
+  asesor_id    Int
+  postulacion_id Int     @unique
+  asignado_en  DateTime  @default(now())
+  asesor       Asesor    @relation(fields: [asesor_id], references: [id])
+  postulacion  Postulacion @relation(fields: [postulacion_id], references: [id], onDelete: Cascade)
+}
+
+model SeguimientoPractica {
+  id               Int        @id @default(autoincrement())
+  postulacion_id   Int        @unique
+  horas_cumplidas  Int        @default(0)
+  horas_totales    Int        @default(300)
+  informe_estudiante String?
+  informe_asesor   String?
+  evaluacion       String     @default("pendiente") // aprobado, desaprobado, pendiente
+  fecha_evaluacion DateTime?  @db.Date
+  created_at       DateTime   @default(now())
+  postulacion      Postulacion @relation(fields: [postulacion_id], references: [id], onDelete: Cascade)
+}
+
+model Tesis {
+  id                     Int            @id @default(autoincrement())
+  titulo                 String
+  resumen                String?
+  estudiante_id          Int
+  asesor_principal_id    Int
+  estado                 EstadoTesis    @default(propuesta)
+  fecha_inicio           DateTime?      @db.Date
+  fecha_sustentacion     DateTime?      @db.Date
+  created_at             DateTime       @default(now())
+  estudiante             Estudiante     @relation(fields: [estudiante_id], references: [id], onDelete: Cascade)
+  asesor_principal       Asesor         @relation("AsesorPrincipal", fields: [asesor_principal_id], references: [id])
+  jurados                JuradoTesis[]
+  avances                AvanceTesis[]
+  acta                   ActaSustentacion?
+}
+
+model JuradoTesis {
+  id        Int      @id @default(autoincrement())
+  tesis_id  Int
+  asesor_id Int
+  rol       String   // presidente, secretario, vocal
+  tesis     Tesis    @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
+  asesor    Asesor   @relation(fields: [asesor_id], references: [id])
+
+  @@unique([tesis_id, rol])
+}
+
+model AvanceTesis {
+  id          Int       @id @default(autoincrement())
+  tesis_id    Int
+  tipo        String    // capitulo, articulo, informe
+  descripcion String
+  fecha_entrega DateTime @db.Date
+  estado      String    @default("entregado") // entregado, revisado, observado, aprobado
+  observaciones String?
+  created_at  DateTime  @default(now())
+  tesis       Tesis     @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
+}
+
+model ActaSustentacion {
+  id               Int       @id @default(autoincrement())
+  tesis_id         Int       @unique
+  fecha            DateTime  @db.Date
+  lugar            String?
+  nota_final       Float?
+  archivo_acta_pdf String?
+  created_at       DateTime  @default(now())
+  tesis            Tesis     @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
+}
+
+model Reporte {
+  id              Int       @id @default(autoincrement())
+  tipo            String
+  parametros      Json?
+  archivo_generado Bytes?
+  generado_en     DateTime  @default(now())
+  generado_por    Int?
+  usuario         Usuario?  @relation(fields: [generado_por], references: [id])
+}
