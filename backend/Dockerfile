@@ -1,26 +1,26 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine
+
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
 COPY package*.json ./
 COPY prisma ./prisma/
+COPY tsconfig.json ./
 
-RUN npm ci --quiet
+RUN npm ci --only=production
+
+RUN npm run prisma:generate
 
 COPY . .
 
-RUN npm run prisma:generate
 RUN npm run build
 
-FROM node:20-alpine
+EXPOSE 3001
 
-WORKDIR /app
+# Script de inicio que ejecuta migraciones y seed
+COPY docker-entrypoint.sh /
+RUN chmod +x /docker-entrypoint.sh
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-
-EXPOSE 4000
-
-CMD ["sh", "-c", "npm run prisma:migrate && npm run prisma:seed && npm run start:prod"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["node", "dist/main"]

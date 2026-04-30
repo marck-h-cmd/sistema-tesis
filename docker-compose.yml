@@ -2,18 +2,17 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: unt-postgres
+    restart: unless-stopped
     environment:
+      POSTGRES_DB: sistema_unt
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: unt_practicas
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - unt-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -21,39 +20,50 @@ services:
       retries: 5
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: unt-backend
-    ports:
-      - "4000:4000"
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/unt_practicas?schema=public
-      JWT_SECRET: ${JWT_SECRET:-supersecretkey}
-      NODE_ENV: production
-      FRONTEND_URL: http://localhost:3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sistema_unt?schema=public
+      JWT_SECRET: ${JWT_SECRET:-tu-secreto-jwt-super-seguro-2024}
+      JWT_EXPIRATION: 24h
+      PORT: 3001
+      NODE_ENV: ${NODE_ENV:-development}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    ports:
+      - "3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - unt-network
-    restart: unless-stopped
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+    command: >
+      sh -c "
+        npx prisma generate &&
+        npx prisma migrate deploy &&
+        npx ts-node prisma/seed.ts &&
+        npm run start:dev
+      "
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: unt-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:3001/api}
     ports:
       - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000
     depends_on:
       - backend
-    networks:
-      - unt-network
-    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
 
 volumes:
   postgres_data:
-    driver: local
-
-networks:
-  unt-network:
-    driver: bridge
