@@ -46,10 +46,10 @@ export default function TesisPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      {/* <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} /> */}
       
-      <div className="lg:ml-64">
-        <Header onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+      {/* <div className="lg:ml-64"> */}
+       
         
         <main className="p-6">
           <div className="flex items-center justify-between mb-8">
@@ -148,7 +148,7 @@ export default function TesisPage() {
             </div>
           )}
         </main>
-      </div>
+      {/* </div> */}
     </div>
   );
 }

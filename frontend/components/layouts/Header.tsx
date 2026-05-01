@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Menu, Bell, User } from 'lucide-react';
+import { Menu, Bell, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/hooks/useAuth';
 
@@ -10,7 +10,7 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuToggle }: HeaderProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 bg-white border-b">
@@ -29,7 +29,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
           </h1>
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2">
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
             <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
@@ -43,6 +43,15 @@ export function Header({ onMenuToggle }: HeaderProps) {
               {user?.nombres}
             </span>
           </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={logout}
+            title="Cerrar sesión"
+          >
+            <LogOut className="h-5 w-5 text-gray-500 hover:text-red-500 transition-colors" />
+          </Button>
         </div>
       </div>
     </header>

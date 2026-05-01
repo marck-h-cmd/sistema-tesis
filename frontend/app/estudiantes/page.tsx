@@ -27,10 +27,7 @@ export default function EstudiantesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-      
-      <div className="lg:ml-64">
-        <Header onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
+
         
         <main className="p-6">
           <div className="mb-8">
@@ -95,7 +92,7 @@ export default function EstudiantesPage() {
             ))}
           </div>
         </main>
-      </div>
+    
     </div>
   );
 }
