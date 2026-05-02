@@ -21,7 +21,7 @@ export class AsesoresController {
   constructor(private readonly asesoresService: AsesoresService) {}
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante)
   async findAll() {
     const asesores = await this.asesoresService.findAll();
     return { data: asesores };

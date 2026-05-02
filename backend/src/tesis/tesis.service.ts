@@ -40,6 +40,8 @@ export class TesisService {
       ];
     }
 
+
+
     return this.prisma.tesis.findMany({
       where,
       include: {
@@ -93,6 +95,14 @@ export class TesisService {
         },
       },
       orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async findAllByEstudiante(estudiante_id: number) {
+    return this.prisma.tesis.findMany({
+      where: {
+        estudiante_id,
+      },
     });
   }
 

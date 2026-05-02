@@ -30,7 +30,7 @@ export class TesisController {
   ) {}
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor,RolNombre.estudiante)
   async findAll(
     @Query('estado') estado?: string,
     @Query('escuela_id') escuela_id?: string,
@@ -41,6 +41,15 @@ export class TesisController {
       escuela_id: escuela_id ? +escuela_id : undefined,
       asesor_id: asesor_id ? +asesor_id : undefined,
     });
+    return { data: tesis };
+  }
+
+  async findAllByEstudiante(
+    @Query('estudiante_id') estudiante_id?: string,
+  ) {
+    const tesis = await this.tesisService.findAllByEstudiante(
+      estudiante_id ? +estudiante_id : undefined,
+    );
     return { data: tesis };
   }
 

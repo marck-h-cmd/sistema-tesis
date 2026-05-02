@@ -35,6 +35,13 @@ export class AvancesService {
 
     return avance;
   }
+  
+  async findAllByTesis(tesisId: number) {
+    return this.prisma.avanceTesis.findMany({
+      where: { tesis_id: tesisId },
+      orderBy: { fecha_entrega: 'desc' },
+    });
+  }
 
   async update(id: number, updateAvanceDto: UpdateAvanceDto) {
     await this.findOne(id);

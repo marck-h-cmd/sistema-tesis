@@ -3,7 +3,7 @@ import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { RolNombre } from '@prisma/client';
+import { RolNombre } from '../common/enums/enums';  // ✅ cambiado
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -13,36 +13,31 @@ export class DashboardController {
   @Get('resumen')
   @Roles(RolNombre.admin, RolNombre.coordinador)
   async getResumen() {
-    const resumen = await this.dashboardService.getResumenGeneral();
-    return { data: resumen };
+    return { data: await this.dashboardService.getResumenGeneral() };
   }
 
   @Get('practicas')
   @Roles(RolNombre.admin, RolNombre.coordinador)
   async getEstadisticasPracticas() {
-    const estadisticas = await this.dashboardService.getEstadisticasPracticas();
-    return { data: estadisticas };
+    return { data: await this.dashboardService.getEstadisticasPracticas() };
   }
 
   @Get('tesis')
   @Roles(RolNombre.admin, RolNombre.coordinador)
   async getEstadisticasTesis() {
-    const estadisticas = await this.dashboardService.getEstadisticasTesis();
-    return { data: estadisticas };
+    return { data: await this.dashboardService.getEstadisticasTesis() };
   }
 
   @Get('empresas')
   @Roles(RolNombre.admin, RolNombre.coordinador)
   async getEstadisticasEmpresas() {
-    const estadisticas = await this.dashboardService.getEstadisticasEmpresas();
-    return { data: estadisticas };
+    return { data: await this.dashboardService.getEstadisticasEmpresas() };
   }
 
   @Get('indicadores')
   @Roles(RolNombre.admin, RolNombre.coordinador)
   async getIndicadores() {
-    const indicadores = await this.dashboardService.getIndicadoresRendimiento();
-    return { data: indicadores };
+    return { data: await this.dashboardService.getIndicadoresRendimiento() };
   }
 
   @Get('completo')
@@ -55,15 +50,6 @@ export class DashboardController {
       this.dashboardService.getEstadisticasEmpresas(),
       this.dashboardService.getIndicadoresRendimiento(),
     ]);
-
-    return {
-      data: {
-        resumen,
-        practicas,
-        tesis,
-        empresas,
-        indicadores,
-      },
-    };
+    return { data: { resumen, practicas, tesis, empresas, indicadores } };
   }
 }
