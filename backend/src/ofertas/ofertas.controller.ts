@@ -93,7 +93,7 @@ export class OfertasController {
   @Post(':id/postulaciones')
   @Roles(RolNombre.estudiante)
   async postular(
-    @Param('id') ofertaId: string,
+    @Param('id') ofertaId: number,
     @Body() createPostulacionDto: CreatePostulacionDto,
     @CurrentUser() user: any,
   ) {

@@ -16,7 +16,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { RolNombre } from '@prisma/client';
+import { RolNombre } from '../common/enums/enums';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
