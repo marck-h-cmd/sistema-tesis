@@ -5,52 +5,62 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Iniciando seed de la base de datos...');
+  
+  // Verificar si ya hay datos
+  const existingUsers = await prisma.usuario.count();
+  if (existingUsers > 0) {
+    console.log('⚠️ La base de datos ya contiene datos. Omitiendo seed...');
+    return;
+  }
 
-  await cleanDatabase();
+  try {
+    const roles = await createRoles();
+    console.log('✅ Roles creados');
 
-  const roles = await createRoles();
-  console.log('✅ Roles creados');
+    const escuelas = await createEscuelas();
+    console.log('✅ Escuelas creadas');
 
-  const escuelas = await createEscuelas();
-  console.log('✅ Escuelas creadas');
+    const usuarios = await createUsuarios(roles);
+    console.log('✅ Usuarios creados');
 
-  const usuarios = await createUsuarios(roles);
-  console.log('✅ Usuarios creados');
+    const estudiantes = await createEstudiantes(usuarios, escuelas);
+    console.log('✅ Estudiantes creados');
 
-  const estudiantes = await createEstudiantes(usuarios, escuelas);
-  console.log('✅ Estudiantes creados');
+    const asesores = await createAsesores(usuarios, escuelas);
+    console.log('✅ Asesores creados');
 
-  const asesores = await createAsesores(usuarios, escuelas);
-  console.log('✅ Asesores creados');
+    const empresas = await createEmpresas();
+    console.log('✅ Empresas creadas');
 
-  const empresas = await createEmpresas();
-  console.log('✅ Empresas creadas');
+    await createConvenios(empresas);
+    console.log('✅ Convenios creados');
 
-  await createConvenios(empresas);
-  console.log('✅ Convenios creados');
+    const ofertas = await createOfertas(empresas);
+    console.log('✅ Ofertas creadas');
 
-  const ofertas = await createOfertas(empresas);
-  console.log('✅ Ofertas creadas');
+    const postulaciones = await createPostulaciones(ofertas, estudiantes, asesores);
+    console.log('✅ Postulaciones creadas');
 
-  const postulaciones = await createPostulaciones(ofertas, estudiantes, asesores);
-  console.log('✅ Postulaciones creadas');
+    await createSeguimientos(postulaciones);
+    console.log('✅ Seguimientos creados');
 
-  await createSeguimientos(postulaciones);
-  console.log('✅ Seguimientos creados');
+    await createTesis(estudiantes, asesores);
+    console.log('✅ Tesis creadas');
 
-  await createTesis(estudiantes, asesores);
-  console.log('✅ Tesis creadas');
+    await createReportes(usuarios);
+    console.log('✅ Reportes creados');
 
-  await createReportes(usuarios);
-  console.log('✅ Reportes creados');
-
-  console.log('🎉 Seed completado exitosamente!');
-  console.log('📧 Credenciales de acceso:');
-  console.log('   Admin: admin@unitru.edu.pe / Admin123@');
-  console.log('   Coordinador: coordinador.sistemas@unitru.edu.pe / Coord123@');
-  console.log('   Asesor: juan.garcia@unitru.edu.pe / Asesor123@');
-  console.log('   Estudiante: carlos.lopez@unitru.edu.pe / Estu123@');
-  console.log('   Empresa: rrhh@techcorp.com / Empresa123@');
+    console.log('🎉 Seed completado exitosamente!');
+    console.log('📧 Credenciales de acceso:');
+    console.log('   Admin: admin@unitru.edu.pe / Admin123@');
+    console.log('   Coordinador: coordinador.sistemas@unitru.edu.pe / Coord123@');
+    console.log('   Asesor: juan.garcia@unitru.edu.pe / Asesor123@');
+    console.log('   Estudiante: carlos.lopez@unitru.edu.pe / Estu123@');
+    console.log('   Empresa: rrhh@techcorp.com / Empresa123@');
+  } catch (error) {
+    console.error('❌ Error en el seed:', error);
+    throw error;
+  }
 }
 
 async function cleanDatabase() {
