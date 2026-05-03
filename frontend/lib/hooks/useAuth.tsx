@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import { authApi } from '../api/endpoints';
 import type { User, LoginCredentials, RegisterData } from '../types';
 import { toast } from 'sonner';
+import type { RolNombre } from '../types/index';
+
+
 
 interface AuthContextType {
   user: User | null;
@@ -39,17 +42,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  // Definir hasRole antes de usarlo
+  const hasRole = useCallback((role: string) => {
+    return user?.roles?.includes(role as any) || false;
+  }, [user]);
+
   const login = useCallback(async (credentials: LoginCredentials) => {
     try {
       const response = await authApi.login(credentials);
-      const { access_token, user } = response.data.data;
+      const { access_token, user: userData } = response.data.data;
       
       Cookies.set('token', access_token, { expires: 1 });
-      Cookies.set('user', JSON.stringify(user), { expires: 1 });
+      Cookies.set('user', JSON.stringify(userData), { expires: 1 });
       
-      setUser(user);
+      setUser(userData);
       toast.success('Inicio de sesión exitoso');
-      router.push('/dashboard');
+
+      // Verificar si el usuario es estudiante
+      const isEstudiante = userData.roles?.includes('estudiante' as RolNombre);
+      
+      if (isEstudiante) {
+        router.push('/practicas');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Error al iniciar sesión';
       toast.error(message);
@@ -60,14 +76,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (data: RegisterData) => {
     try {
       const response = await authApi.register(data);
-      const { access_token, user } = response.data.data;
+      const { access_token, user: userData } = response.data.data;
       
       Cookies.set('token', access_token, { expires: 1 });
-      Cookies.set('user', JSON.stringify(user), { expires: 1 });
+      Cookies.set('user', JSON.stringify(userData), { expires: 1 });
       
-      setUser(user);
+      setUser(userData);
       toast.success('Registro exitoso');
-      router.push('/dashboard');
+      
+      // Verificar si el usuario es estudiante
+      const isEstudiante = userData.roles?.includes('estudiante' as RolNombre);
+      
+      if (isEstudiante) {
+        router.push('/practicas');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Error al registrarse';
       toast.error(message);
@@ -82,10 +106,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login');
     toast.success('Sesión cerrada');
   }, [router]);
-
-  const hasRole = useCallback((role: string) => {
-    return user?.roles?.includes(role as any) || false;
-  }, [user]);
 
   const value = {
     user,

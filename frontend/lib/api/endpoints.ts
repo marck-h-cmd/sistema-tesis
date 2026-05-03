@@ -28,6 +28,7 @@ export const estudiantesApi = {
   create: (data: any) => apiClient.post('/estudiantes', data),
   update: (id: number, data: any) => apiClient.put(`/estudiantes/${id}`, data),
   delete: (id: number) => apiClient.delete(`/estudiantes/${id}`),
+  getByUserId: (userId: number) =>   apiClient.get<ApiResponse<Estudiante>>(`/estudiantes/user/${userId}`)
 };
 
 // Empresas
@@ -54,6 +55,8 @@ export const ofertasApi = {
     apiClient.get(`/ofertas/${ofertaId}/postulaciones`),
   updateEstadoPostulacion: (postulacionId: number, data: any) =>
     apiClient.put(`/ofertas/postulaciones/${postulacionId}/estado`, data),
+  getMisPostulaciones: () => 
+    apiClient.get<ApiResponse<Postulacion[]>>('/ofertas/mis-postulaciones'),
 };
 
 // Seguimiento
@@ -69,6 +72,8 @@ export const seguimientoApi = {
 // Tesis
 export const tesisApi = {
   getAll: (params?: any) => apiClient.get<ApiResponse<Tesis[]>>('/tesis', { params }),
+  getByEstudiante: (estudianteId: number) =>
+    apiClient.get<ApiResponse<Tesis[]>>(`/tesis/estudiante/${estudianteId}`),
   getOne: (id: number) => apiClient.get<ApiResponse<Tesis>>(`/tesis/${id}`),
   create: (data: any) => apiClient.post('/tesis', data),
   update: (id: number, data: any) => apiClient.put(`/tesis/${id}`, data),
@@ -100,6 +105,10 @@ export const reportesApi = {
     apiClient.post('/reportes/tesis', {}, { responseType: 'blob' }),
   generarEmpresas: () =>
     apiClient.post('/reportes/empresas', {}, { responseType: 'blob' }),
+  verDocumentoTesis: (tesisId: number) =>
+    apiClient.get(`/reportes/tesis/${tesisId}/documento`, { responseType: 'blob' }),
+  descargarInformeTesis: (tesisId: number) =>
+    apiClient.get(`/reportes/tesis/${tesisId}/descargar`, { responseType: 'blob' }),
   getHistorial: () => apiClient.get('/reportes/historial'),
   descargar: (id: number) =>
     apiClient.get(`/reportes/${id}/descargar`, { responseType: 'blob' }),

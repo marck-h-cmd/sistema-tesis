@@ -89,7 +89,7 @@ export default function EmpresaDetailPage() {
           </Card>
 
           {/* Convenios */}
-          {empresa.convenios?.length > 0 && (
+          {Array.isArray(empresa.convenios) && empresa.convenios.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -99,7 +99,7 @@ export default function EmpresaDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {empresa.convenios.map((convenio: any) => (
+                  {Array.isArray(empresa.convenios) && empresa.convenios.map((convenio: any) => (
                     <div key={convenio.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <Badge className="capitalize">{convenio.tipo}</Badge>
@@ -119,7 +119,7 @@ export default function EmpresaDetailPage() {
           )}
 
           {/* Ofertas activas */}
-          {empresa.ofertas?.length > 0 && (
+          {Array.isArray(empresa.ofertas) && empresa.ofertas.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">

@@ -26,6 +26,7 @@ const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'coordinador', 'asesor'] },
   { href: '/practicas', label: 'Prácticas', icon: Briefcase, roles: ['admin', 'coordinador', 'asesor', 'estudiante', 'empresa'] },
   { href: '/tesis', label: 'Tesis', icon: GraduationCap, roles: ['admin', 'coordinador', 'asesor', 'estudiante'] },
+  { href: '/mis-postulaciones', label: 'Mis Postulaciones', icon: Briefcase, roles: ['estudiante'] },
   { href: '/estudiantes', label: 'Estudiantes', icon: Users, roles: ['admin', 'coordinador', 'asesor'] },
   { href: '/empresas', label: 'Empresas', icon: Building2, roles: ['admin', 'coordinador', 'estudiante'] },
   { href: '/reportes', label: 'Reportes', icon: FileText, roles: ['admin', 'coordinador'] },

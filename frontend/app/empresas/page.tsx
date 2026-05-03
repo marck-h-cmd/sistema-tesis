@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { Sidebar } from '@/components/layouts/Sidebar';
 import { Header } from '@/components/layouts/Header';
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -49,10 +50,12 @@ export default function EmpresasPage() {
               </p>
             </div>
             {(hasRole('admin') || hasRole('coordinador')) && (
+              <Link href="/empresas/nueva">
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva Empresa
               </Button>
+              </Link>
             )}
           </div>
 

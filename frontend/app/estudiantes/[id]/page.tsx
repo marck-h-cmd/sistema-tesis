@@ -76,7 +76,7 @@ export default function EstudianteDetailPage() {
           </Card>
 
           {/* Prácticas */}
-          {estudiante.postulaciones?.length > 0 && (
+          {Array.isArray(estudiante.postulaciones) && estudiante.postulaciones.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -86,7 +86,7 @@ export default function EstudianteDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {estudiante.postulaciones.map((post: any) => (
+                  {estudiante.postulaciones?.map((post: any) => (
                     <div key={post.id} className="border rounded-lg p-4">
                       <div className="flex items-start justify-between">
                         <div>
@@ -109,7 +109,7 @@ export default function EstudianteDetailPage() {
           )}
 
           {/* Tesis */}
-          {estudiante.tesis?.length > 0 && (
+          {Array.isArray(estudiante.tesis) && estudiante.tesis.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -119,7 +119,7 @@ export default function EstudianteDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {estudiante.tesis.map((t: any) => (
+                  {estudiante.tesis?.map((t: any) => (
                     <div key={t.id} className="border rounded-lg p-4">
                       <p className="font-medium">{t.titulo}</p>
                       <p className="text-sm text-muted-foreground mt-1">

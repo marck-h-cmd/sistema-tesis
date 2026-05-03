@@ -42,6 +42,9 @@ export default function ReportesPage() {
       }
 
       // Descargar el archivo
+      if (!response || !response.data) {
+        throw new Error('No se recibió respuesta del servidor');
+      }
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;

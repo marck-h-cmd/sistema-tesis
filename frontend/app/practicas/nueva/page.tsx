@@ -47,11 +47,7 @@ export default function NuevaOfertaPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-      
-      <div className="lg:ml-64">
-        <Header onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
-        
+
         <main className="p-6">
           <div className="max-w-2xl mx-auto">
             <Link
@@ -171,7 +167,6 @@ export default function NuevaOfertaPage() {
             </Card>
           </div>
         </main>
-      </div>
     </div>
   );
 }

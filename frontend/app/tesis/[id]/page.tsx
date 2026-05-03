@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { tesisApi } from '@/lib/api/endpoints';
+import { reportesApi, tesisApi } from '@/lib/api/endpoints';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,10 +20,13 @@ const estadosTesis: Record<string, { color: string; label: string }> = {
 
 export default function TesisDetailPage() {
   const { id } = useParams();
+  const tesisId = Number(id);
+  const [isViewingPdf, setIsViewingPdf] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const { data: tesis, isLoading } = useQuery({
     queryKey: ['tesis', id],
-    queryFn: () => tesisApi.getOne(Number(id)).then(res => res.data.data),
+    queryFn: () => tesisApi.getOne(tesisId).then(res => res.data.data),
   });
 
   if (isLoading) {
@@ -39,6 +42,45 @@ export default function TesisDetailPage() {
   }
 
   const estadoConfig = estadosTesis[tesis.estado] || { color: 'bg-gray-100 text-gray-800', label: tesis.estado };
+
+  const handleVerDocumento = async () => {
+    if (!tesisId || Number.isNaN(tesisId)) return;
+
+    try {
+      setIsViewingPdf(true);
+      const response = await reportesApi.verDocumentoTesis(tesisId);
+      const url = window.URL.createObjectURL(response.data);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      console.error(error);
+      alert('No se pudo generar el documento PDF');
+    } finally {
+      setIsViewingPdf(false);
+    }
+  };
+
+  const handleDescargarInforme = async () => {
+    if (!tesisId || Number.isNaN(tesisId)) return;
+
+    try {
+      setIsDownloadingPdf(true);
+      const response = await reportesApi.descargarInformeTesis(tesisId);
+      const url = window.URL.createObjectURL(response.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `informe-tesis-${tesisId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(error);
+      alert('No se pudo descargar el informe PDF');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   return (
     <div>
@@ -98,7 +140,7 @@ export default function TesisDetailPage() {
           </Card>
 
           {/* Jurados */}
-          {tesis.jurados?.length > 0 && (
+          {Array.isArray(tesis.jurados) && tesis.jurados.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Jurados</CardTitle>
@@ -120,7 +162,7 @@ export default function TesisDetailPage() {
           )}
 
           {/* Avances */}
-          {tesis.avances?.length > 0 && (
+          {Array.isArray(tesis.avances) && tesis.avances.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Avances</CardTitle>
@@ -193,11 +235,21 @@ export default function TesisDetailPage() {
             <CardContent className="p-6">
               <h3 className="font-semibold mb-4">Acciones</h3>
               <div className="space-y-2">
-                <Button className="w-full" variant="outline" disabled>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={handleVerDocumento}
+                  disabled={isViewingPdf || isDownloadingPdf}
+                >
                   <FileText className="h-4 w-4 mr-2" />
                   Ver documento
                 </Button>
-                <Button className="w-full" variant="outline" disabled>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={handleDescargarInforme}
+                  disabled={isViewingPdf || isDownloadingPdf}
+                >
                   Descargar informe
                 </Button>
               </div>
