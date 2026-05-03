@@ -23,7 +23,7 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'coordinador', 'asesor'] },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'coordinador'] },
   { href: '/practicas', label: 'Prácticas', icon: Briefcase, roles: ['admin', 'coordinador', 'asesor', 'estudiante', 'empresa'] },
   { href: '/tesis', label: 'Tesis', icon: GraduationCap, roles: ['admin', 'coordinador', 'asesor', 'estudiante'] },
   { href: '/mis-postulaciones', label: 'Mis Postulaciones', icon: Briefcase, roles: ['estudiante'] },

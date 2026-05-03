@@ -86,9 +86,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Verificar si el usuario es estudiante
       const isEstudiante = userData.roles?.includes('estudiante' as RolNombre);
+      const isEmpresa = userData.roles?.includes('empresa' as RolNombre);
+      const isAsesor = userData.roles?.includes('asesor' as RolNombre);
       
-      if (isEstudiante) {
-        router.push('/practicas');
+      if (isEstudiante || isEmpresa || isAsesor) {
+        router.push('/practicas'); 
       } else {
         router.push('/dashboard');
       }
