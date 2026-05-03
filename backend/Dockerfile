@@ -1,43 +1,58 @@
-FROM node:20-alpine
+# ==================== STAGE 1: Builder ====================
+FROM node:20-alpine AS builder
 
-# Instalar dependencias necesarias
-RUN apk add --no-cache openssl chromium
-
-# Configurar Puppeteer para usar Chromium del sistema
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Copiar archivos de dependencias
+# Copiar dependencias
 COPY package*.json ./
 COPY prisma ./prisma/
 COPY tsconfig.json ./
 COPY nest-cli.json ./
 
-# Instalar TODAS las dependencias
+# Instalar TODAS las dependencias (incluyendo devDependencies)
 RUN npm ci
 
 # Generar Prisma Client
 RUN npx prisma generate
 
-# Copiar el resto del código fuente
-COPY . .
+# Copiar código fuente
+COPY src ./src
 
-# Construir la aplicación
+# ✅ Compilar — genera /app/dist/
 RUN npm run build
 
-# Eliminar dependencias de desarrollo
-RUN npm prune --production
+# ==================== STAGE 2: Runner ====================
+FROM node:20-alpine AS runner
 
-# ⚠️ IMPORTANTE: Exponer el puerto 10000 (por defecto en Render)
-# También exponer 3001 para desarrollo local
-EXPOSE 10000
-EXPOSE 3001
+RUN apk add --no-cache openssl chromium
 
-# Copiar y hacer ejecutable el entrypoint
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+WORKDIR /app
+
+# Solo dependencias de producción
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copiar prisma (necesario para prisma db push en runtime)
+COPY prisma ./prisma/
+
+# Copiar Prisma Client generado desde el builder
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# ✅ Copiar el dist compilado desde el builder
+COPY --from=builder /app/dist ./dist
+
+# Copiar entrypoint
 COPY docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 10000
+EXPOSE 3001
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/main"]
