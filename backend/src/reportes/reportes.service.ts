@@ -10,6 +10,21 @@ import { es } from 'date-fns/locale';
 export class ReportesService {
   constructor(private prisma: PrismaService) {}
 
+  private escapeHtml(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  private formatFechaCorta(value: Date | null | undefined): string {
+    if (!value) return '-';
+    return format(value, 'dd/MM/yyyy');
+  }
+
   private async generatePDF(htmlContent: string): Promise<Buffer> {
     const browser = await puppeteer.launch({
       headless: 'new',
@@ -37,6 +52,356 @@ export class ReportesService {
     } finally {
       await browser.close();
     }
+  }
+
+  async generarDocumentoTesis(tesisId: number) {
+    const tesis = await this.prisma.tesis.findUnique({
+      where: { id: tesisId },
+      include: {
+        estudiante: {
+          include: {
+            usuario: {
+              select: {
+                nombres: true,
+                apellidos: true,
+                dni: true,
+                email: true,
+              },
+            },
+            escuela: {
+              select: {
+                nombre: true,
+                facultad: true,
+              },
+            },
+          },
+        },
+        asesor_principal: {
+          include: {
+            usuario: {
+              select: {
+                nombres: true,
+                apellidos: true,
+                email: true,
+              },
+            },
+          },
+        },
+        jurados: {
+          include: {
+            asesor: {
+              include: {
+                usuario: {
+                  select: {
+                    nombres: true,
+                    apellidos: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        avances: {
+          orderBy: { fecha_entrega: 'desc' },
+        },
+        acta: true,
+      },
+    });
+
+    if (!tesis) {
+      throw new NotFoundException(`Tesis con ID ${tesisId} no encontrada`);
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #1f2937;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 24px;
+            border-bottom: 3px solid #1a365d;
+            padding-bottom: 16px;
+          }
+          .header h1 {
+            color: #1a365d;
+            font-size: 22px;
+            margin: 0 0 8px 0;
+          }
+          .header h2 {
+            color: #2d3748;
+            font-size: 16px;
+            margin: 0;
+            font-weight: normal;
+          }
+          .meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 18px;
+            margin-top: 12px;
+            color: #4b5563;
+            font-size: 11px;
+          }
+          .section {
+            margin-top: 18px;
+          }
+          .section-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #111827;
+            margin: 0 0 10px 0;
+            padding: 8px 10px;
+            background: #f3f4f6;
+            border-left: 4px solid #2b6cb0;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 18px;
+          }
+          .field {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 10px;
+          }
+          .field .label {
+            font-size: 10px;
+            color: #6b7280;
+            margin-bottom: 3px;
+          }
+          .field .value {
+            font-size: 12px;
+            color: #111827;
+            font-weight: 600;
+          }
+          .value-normal {
+            font-weight: normal;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+          }
+          th {
+            background-color: #2b6cb0;
+            color: white;
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 11px;
+          }
+          td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 11px;
+            vertical-align: top;
+          }
+          tr:nth-child(even) {
+            background-color: #f9fafb;
+          }
+          .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+          }
+          .badge-success { background-color: #c6f6d5; color: #22543d; }
+          .badge-warning { background-color: #fefcbf; color: #744210; }
+          .badge-info { background-color: #bee3f8; color: #2a4365; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Universidad Nacional de Trujillo</h1>
+          <h2>Documento de Tesis</h2>
+          <div class="meta">
+            <div><strong>Código:</strong> TES-${tesisId}</div>
+            <div><strong>Generado el:</strong> ${format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es })}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Datos de la Tesis</div>
+          <div class="grid">
+            <div class="field">
+              <div class="label">Título</div>
+              <div class="value value-normal">${this.escapeHtml(tesis.titulo)}</div>
+            </div>
+            <div class="field">
+              <div class="label">Estado</div>
+              <div class="value">${this.escapeHtml(tesis.estado)}</div>
+            </div>
+            <div class="field">
+              <div class="label">Fecha de inicio</div>
+              <div class="value">${this.formatFechaCorta(tesis.fecha_inicio as any)}</div>
+            </div>
+            <div class="field">
+              <div class="label">Fecha de sustentación</div>
+              <div class="value">${this.formatFechaCorta(tesis.fecha_sustentacion as any)}</div>
+            </div>
+          </div>
+        </div>
+
+        ${
+          tesis.resumen
+            ? `
+          <div class="section">
+            <div class="section-title">Resumen</div>
+            <div class="field">
+              <div class="value value-normal">${this.escapeHtml(tesis.resumen)}</div>
+            </div>
+          </div>
+        `
+            : ''
+        }
+
+        <div class="section">
+          <div class="section-title">Participantes</div>
+          <div class="grid">
+            <div class="field">
+              <div class="label">Estudiante</div>
+              <div class="value value-normal">
+                ${this.escapeHtml(tesis.estudiante?.usuario?.apellidos)}, ${this.escapeHtml(tesis.estudiante?.usuario?.nombres)}
+              </div>
+              <div class="label" style="margin-top: 6px;">DNI / Email</div>
+              <div class="value value-normal">
+                ${this.escapeHtml(tesis.estudiante?.usuario?.dni)} / ${this.escapeHtml(tesis.estudiante?.usuario?.email)}
+              </div>
+            </div>
+            <div class="field">
+              <div class="label">Asesor principal</div>
+              <div class="value value-normal">
+                ${this.escapeHtml(tesis.asesor_principal?.usuario?.apellidos)}, ${this.escapeHtml(tesis.asesor_principal?.usuario?.nombres)}
+              </div>
+              <div class="label" style="margin-top: 6px;">Email</div>
+              <div class="value value-normal">${this.escapeHtml(tesis.asesor_principal?.usuario?.email)}</div>
+            </div>
+            <div class="field">
+              <div class="label">Escuela</div>
+              <div class="value value-normal">${this.escapeHtml(tesis.estudiante?.escuela?.nombre)}</div>
+              <div class="label" style="margin-top: 6px;">Facultad</div>
+              <div class="value value-normal">${this.escapeHtml(tesis.estudiante?.escuela?.facultad)}</div>
+            </div>
+            <div class="field">
+              <div class="label">Cantidad de avances</div>
+              <div class="value">${tesis.avances?.length || 0}</div>
+              <div class="label" style="margin-top: 6px;">Cantidad de jurados</div>
+              <div class="value">${tesis.jurados?.length || 0}</div>
+            </div>
+          </div>
+        </div>
+
+        ${
+          tesis.jurados?.length
+            ? `
+          <div class="section">
+            <div class="section-title">Jurados</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Rol</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tesis.jurados
+                  .map(
+                    (j: any) => `
+                  <tr>
+                    <td>${this.escapeHtml(j.asesor?.usuario?.apellidos)}, ${this.escapeHtml(j.asesor?.usuario?.nombres)}</td>
+                    <td>${this.escapeHtml(j.rol)}</td>
+                  </tr>
+                `,
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>
+        `
+            : ''
+        }
+
+        ${
+          tesis.avances?.length
+            ? `
+          <div class="section">
+            <div class="section-title">Avances</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Fecha</th>
+                  <th>Estado</th>
+                  <th>Descripción</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tesis.avances
+                  .map(
+                    (a: any) => {
+                      const badge =
+                        a.estado === 'aprobado'
+                          ? 'success'
+                          : a.estado === 'observado'
+                            ? 'warning'
+                            : 'info';
+                      return `
+                        <tr>
+                          <td>${this.escapeHtml(a.tipo)}</td>
+                          <td>${this.formatFechaCorta(a.fecha_entrega as any)}</td>
+                          <td><span class="badge badge-${badge}">${this.escapeHtml(a.estado)}</span></td>
+                          <td>${this.escapeHtml(a.descripcion)}</td>
+                        </tr>
+                      `;
+                    },
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>
+        `
+            : ''
+        }
+
+        ${
+          tesis.acta
+            ? `
+          <div class="section">
+            <div class="section-title">Acta de Sustentación</div>
+            <div class="grid">
+              <div class="field">
+                <div class="label">Fecha</div>
+                <div class="value">${this.formatFechaCorta(tesis.acta.fecha as any)}</div>
+              </div>
+              <div class="field">
+                <div class="label">Lugar</div>
+                <div class="value value-normal">${this.escapeHtml(tesis.acta.lugar || '-')}</div>
+              </div>
+              <div class="field">
+                <div class="label">Nota final</div>
+                <div class="value">${tesis.acta.nota_final ?? '-'}</div>
+              </div>
+              <div class="field">
+                <div class="label">Estado final</div>
+                <div class="value">${this.escapeHtml(tesis.estado)}</div>
+              </div>
+            </div>
+          </div>
+        `
+            : ''
+        }
+      </body>
+      </html>
+    `;
+
+    return this.generatePDF(htmlContent);
   }
 
   async generarReportePracticas() {

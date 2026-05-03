@@ -7,6 +7,7 @@ import {
   HttpStatus,
   UseGuards,
   StreamableFile,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ReportesService } from './reportes.service';
@@ -19,6 +20,39 @@ import { RolNombre } from '@prisma/client';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ReportesController {
   constructor(private readonly reportesService: ReportesService) {}
+
+  @Get('tesis/:id/documento')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  async verDocumentoTesis(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    const pdf = await this.reportesService.generarDocumentoTesis(id);
+    const fecha = new Date().toISOString().split('T')[0];
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="tesis-${id}-documento-${fecha}.pdf"`,
+      'Content-Length': pdf.length.toString(),
+    });
+
+    res.end(pdf);
+  }
+
+  @Get('tesis/:id/descargar')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  async descargarDocumentoTesis(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.reportesService.generarDocumentoTesis(id);
+    const fecha = new Date().toISOString().split('T')[0];
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="tesis-${id}-informe-${fecha}.pdf"`,
+      'Content-Length': pdf.length.toString(),
+    });
+
+    res.end(pdf);
+  }
 
   @Post('practicas')
   @Roles(RolNombre.admin, RolNombre.coordinador)

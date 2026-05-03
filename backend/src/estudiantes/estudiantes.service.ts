@@ -39,6 +39,12 @@ export class EstudiantesService {
     });
   }
 
+  async getByUserId(userId: number) {
+    return this.prisma.estudiante.findUnique({
+      where: { usuario_id: userId },
+    });
+  }
+
   async findOne(id: number) {
     const estudiante = await this.prisma.estudiante.findUnique({
       where: { id },

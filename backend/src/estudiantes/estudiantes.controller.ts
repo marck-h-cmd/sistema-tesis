@@ -35,6 +35,13 @@ export class EstudiantesController {
     return { data: estudiante };
   }
 
+  @Get('user/:userId')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  async getByUserId(@Param('userId') userId: string) {
+    const estudiante = await this.estudiantesService.getByUserId(+userId);
+    return { data: estudiante };
+  }
+
   @Post()
   @Roles(RolNombre.admin, RolNombre.coordinador)
   async create(@Body() createEstudianteDto: CreateEstudianteDto) {

@@ -30,7 +30,7 @@ export class TesisController {
   ) {}
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor,RolNombre.estudiante)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor)
   async findAll(
     @Query('estado') estado?: string,
     @Query('escuela_id') escuela_id?: string,
@@ -44,14 +44,16 @@ export class TesisController {
     return { data: tesis };
   }
 
-  async findAllByEstudiante(
-    @Query('estudiante_id') estudiante_id?: string,
-  ) {
-    const tesis = await this.tesisService.findAllByEstudiante(
-      estudiante_id ? +estudiante_id : undefined,
-    );
-    return { data: tesis };
-  }
+@Get('estudiante/:estudiante_id')
+@Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+async findAllByEstudiante(
+  @Param('estudiante_id') estudiante_id: string,  // Cambiar @Query a @Param
+) {
+  const tesis = await this.tesisService.findAllByEstudiante(
+    estudiante_id ? +estudiante_id : undefined,
+  );
+  return { data: tesis };
+}
 
   @Get('estadisticas')
   @Roles(RolNombre.admin, RolNombre.coordinador)
