@@ -42,13 +42,13 @@ async function bootstrap() {
   console.log(`📡 API: http://${host}:${port}/api`);
   console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
 
-  // ✅ Seed DESPUÉS de que el servidor ya está escuchando
-  try {
-    console.log('🌱 Verificando seed de datos...');
-    await main();
-  } catch (error) {
-    console.error('⚠️ Seed falló (no crítico):', error.toString());
-  }
+  // // ✅ Seed DESPUÉS de que el servidor ya está escuchando
+  // try {
+  //   console.log('🌱 Verificando seed de datos...');
+  //   await main();
+  // } catch (error) {
+  //   console.error('⚠️ Seed falló (no crítico):', error.toString());
+  // }
 }
 
 bootstrap().catch((error) => {
