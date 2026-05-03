@@ -5,23 +5,21 @@ RUN apk add --no-cache openssl
 
 WORKDIR /app
 
-# Copiar dependencias
-COPY package*.json ./
-COPY prisma ./prisma/
-COPY tsconfig.json ./
-COPY nest-cli.json ./
+# Copiar TODO primero (para que nest build tenga todo lo que necesita)
+COPY . .
 
-# Instalar TODAS las dependencias (incluyendo devDependencies)
+# Instalar TODAS las dependencias
 RUN npm ci
 
 # Generar Prisma Client
 RUN npx prisma generate
 
-# Copiar código fuente
-COPY src ./src
-
-# ✅ Compilar — genera /app/dist/
+# Compilar
 RUN npm run build
+
+# Verificar que el dist existe (debug)
+RUN ls -la dist/ && echo "✅ dist generado" || echo "❌ dist NO encontrado"
+RUN ls -la dist/main.js && echo "✅ main.js existe" || echo "❌ main.js NO existe"
 
 # ==================== STAGE 2: Runner ====================
 FROM node:20-alpine AS runner
@@ -33,21 +31,21 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 WORKDIR /app
 
-# Solo dependencias de producción
 COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copiar prisma (necesario para prisma db push en runtime)
 COPY prisma ./prisma/
 
-# Copiar Prisma Client generado desde el builder
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+RUN npm ci --omit=dev
 
-# ✅ Copiar el dist compilado desde el builder
+# Copiar Prisma Client generado
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+
+# Copiar dist compilado
 COPY --from=builder /app/dist ./dist
 
-# Copiar entrypoint
+# Debug en runner también
+RUN ls -la dist/ && ls -la dist/main.js
+
 COPY docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
 
