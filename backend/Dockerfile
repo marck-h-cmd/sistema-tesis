@@ -1,6 +1,11 @@
 FROM node:20-alpine
 
-RUN apk add --no-cache openssl
+# Instalar dependencias necesarias
+RUN apk add --no-cache openssl chromium
+
+# Configurar Puppeteer para usar Chromium del sistema
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 WORKDIR /app
 
@@ -10,7 +15,7 @@ COPY prisma ./prisma/
 COPY tsconfig.json ./
 COPY nest-cli.json ./
 
-# Instalar TODAS las dependencias (producción + desarrollo)
+# Instalar TODAS las dependencias
 RUN npm ci
 
 # Generar Prisma Client
@@ -22,9 +27,12 @@ COPY . .
 # Construir la aplicación
 RUN npm run build
 
-# Eliminar dependencias de desarrollo para reducir tamaño
+# Eliminar dependencias de desarrollo
 RUN npm prune --production
 
+# ⚠️ IMPORTANTE: Exponer el puerto 10000 (por defecto en Render)
+# También exponer 3001 para desarrollo local
+EXPOSE 10000
 EXPOSE 3001
 
 # Copiar y hacer ejecutable el entrypoint
