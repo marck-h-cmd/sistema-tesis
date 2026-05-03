@@ -4,7 +4,7 @@
   "description": "Backend para Sistema de Gestión de Prácticas y Tesis - UNT",
   "main": "dist/main.js",
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && tsc -p tsconfig.seed.json",
     "start": "node dist/main",
     "start:dev": "nest start --watch",
     "start:prod": "npx prisma migrate deploy && npx ts-node prisma/seed.ts && node dist/main",
