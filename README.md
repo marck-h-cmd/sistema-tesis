@@ -1,8 +1,3 @@
-Aquí tienes el README completo para todo el proyecto:
-
-## README.md
-
-```markdown
 # 🎓 Sistema de Gestión de Prácticas y Tesis - UNT
 
 Sistema web completo para la gestión de prácticas preprofesionales y tesis de la **Universidad Nacional de Trujillo**.
