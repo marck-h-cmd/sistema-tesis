@@ -7,9 +7,16 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // CORS - Permitir el frontend y también solicitudes sin origen (para pruebas)
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://localhost:3000',
+      'http://localhost:3001',
+    ].filter(Boolean),
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   app.useGlobalPipes(
@@ -25,6 +32,18 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  await app.listen(process.env.PORT || 3001);
+  // CRÍTICO PARA RENDER: Escuchar en 0.0.0.0:$PORT
+  const port = parseInt(process.env.PORT || '3001', 10);
+  const host = '0.0.0.0';
+  
+  await app.listen(port, host);
+  
+  console.log(`🚀 Servidor corriendo en http://${host}:${port}`);
+  console.log(`📡 API: http://${host}:${port}/api`);
+  console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
 }
-bootstrap();
+
+bootstrap().catch((error) => {
+  console.error('❌ Error al iniciar la aplicación:', error);
+  process.exit(1);
+});
