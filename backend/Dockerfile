@@ -4,21 +4,30 @@ RUN apk add --no-cache openssl
 
 WORKDIR /app
 
+# Copiar archivos de dependencias
 COPY package*.json ./
 COPY prisma ./prisma/
 COPY tsconfig.json ./
+COPY nest-cli.json ./
 
-RUN npm ci --only=production
+# Instalar TODAS las dependencias (producción + desarrollo)
+RUN npm ci
 
-RUN npm run prisma:generate
+# Generar Prisma Client
+RUN npx prisma generate
 
+# Copiar el resto del código fuente
 COPY . .
 
+# Construir la aplicación
 RUN npm run build
+
+# Eliminar dependencias de desarrollo para reducir tamaño
+RUN npm prune --production
 
 EXPOSE 3001
 
-# Script de inicio que ejecuta migraciones y seed
+# Copiar y hacer ejecutable el entrypoint
 COPY docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
 

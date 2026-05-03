@@ -6,10 +6,10 @@ npx prisma migrate deploy
 
 if [ "$NODE_ENV" = "production" ]; then
   echo "🌱 Ejecutando seed de producción..."
-  npm run prisma:seed
+  npx ts-node prisma/seed.ts
 elif [ "$NODE_ENV" = "development" ]; then
   echo "🌱 Ejecutando seed de desarrollo..."
-  npm run prisma:seed
+  npx ts-node prisma/seed.ts
 fi
 
 echo "🚀 Iniciando aplicación..."
