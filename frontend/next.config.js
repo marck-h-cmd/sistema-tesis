@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+console.log('BACKEND_URL:', process.env.BACKEND_URL);
 const nextConfig = {
   output: 'standalone',
   images: {
