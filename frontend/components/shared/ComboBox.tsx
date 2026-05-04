@@ -103,7 +103,7 @@ export function ComboBox({
         </div>
 
         {/* Dropdown */}
-        {isOpen && !value && (
+        {isOpen && (
           <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
             {isLoading ? (
               <div className="p-4 text-center">
@@ -137,7 +137,7 @@ export function ComboBox({
                         <p className="text-xs text-muted-foreground">{option.subtitle}</p>
                       )}
                     </div>
-                    {value?.id === option.id && (
+                    {value && value.id === option.id && (
                       <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
                     )}
                   </div>
