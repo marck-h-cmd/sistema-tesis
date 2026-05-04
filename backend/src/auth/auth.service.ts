@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -17,25 +21,17 @@ export class AuthService {
       where: { email },
       include: {
         roles: {
-          include: {
-            rol: true,
-          },
+          include: { rol: true },
         },
       },
     });
 
-    if (!user) {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
+    if (!user) throw new UnauthorizedException('Credenciales inválidas');
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
+    if (!isPasswordValid) throw new UnauthorizedException('Credenciales inválidas');
 
-    if (!user.activo) {
-      throw new UnauthorizedException('Usuario desactivado');
-    }
+    if (!user.activo) throw new UnauthorizedException('Usuario desactivado');
 
     const { password: _, ...result } = user;
     return result;
@@ -63,49 +59,97 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto) {
+    // ── 1. Verificar duplicados ──────────────────────────────────────────────
     const existingUser = await this.prisma.usuario.findFirst({
       where: {
-        OR: [
-          { email: registerDto.email },
-          { dni: registerDto.dni },
-        ],
+        OR: [{ email: registerDto.email }, { dni: registerDto.dni }],
       },
     });
 
     if (existingUser) {
-      throw new UnauthorizedException('El email o DNI ya están registrados');
+      throw new ConflictException('El email o DNI ya están registrados');
+    }
+
+    // Si se envía código universitario, verificar que no exista
+    if (registerDto.codigo_universitario) {
+      const existingEstudiante = await this.prisma.estudiante.findUnique({
+        where: { codigo_universitario: registerDto.codigo_universitario },
+      });
+      if (existingEstudiante) {
+        throw new ConflictException('El código universitario ya está registrado');
+      }
     }
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
-    const user = await this.prisma.usuario.create({
-      data: {
-        email: registerDto.email,
-        password: hashedPassword,
-        nombres: registerDto.nombres,
-        apellidos: registerDto.apellidos,
-        dni: registerDto.dni,
-        telefono: registerDto.telefono,
-      },
-    });
-
-    // Asignar rol por defecto (estudiante)
+    // ── 2. Obtener rol estudiante y escuela por defecto ──────────────────────
     const rolEstudiante = await this.prisma.rol.findUnique({
       where: { nombre: 'estudiante' },
     });
 
-    if (rolEstudiante) {
-      await this.prisma.usuarioRol.create({
+    if (!rolEstudiante) {
+      throw new Error('Rol estudiante no encontrado en la base de datos');
+    }
+
+    // Escuela por defecto: la primera disponible si no se especifica
+    let escuelaId = registerDto.escuela_id;
+    if (!escuelaId) {
+      const primeraEscuela = await this.prisma.escuela.findFirst();
+      escuelaId = primeraEscuela?.id;
+    }
+
+    // ── 3. Crear todo en una transacción ─────────────────────────────────────
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Crear usuario
+      const user = await tx.usuario.create({
+        data: {
+          email: registerDto.email,
+          password: hashedPassword,
+          nombres: registerDto.nombres,
+          apellidos: registerDto.apellidos,
+          dni: registerDto.dni,
+          telefono: registerDto.telefono,
+        },
+      });
+
+      // Asignar rol estudiante
+      await tx.usuarioRol.create({
         data: {
           usuario_id: user.id,
           rol_id: rolEstudiante.id,
         },
       });
-    }
 
+      // Crear perfil Estudiante (siempre, ya que el registro público es para estudiantes)
+      if (escuelaId) {
+        const codigoUniversitario =
+          registerDto.codigo_universitario ||
+          this.generarCodigoUniversitario(registerDto.dni);
+
+        await tx.estudiante.create({
+          data: {
+            usuario_id: user.id,
+            escuela_id: escuelaId,
+            codigo_universitario: codigoUniversitario,
+            ciclo: registerDto.ciclo ?? null,
+          },
+        });
+      }
+
+      return user;
+    });
+
+    // ── 4. Devolver token igual que login ────────────────────────────────────
     return this.login({
       email: registerDto.email,
       password: registerDto.password,
     });
+  }
+
+  // ── Utilidad: genera código provisional a partir del DNI ──────────────────
+  private generarCodigoUniversitario(dni: string): string {
+    const year = new Date().getFullYear();
+    // Formato: AÑO + últimos 5 dígitos del DNI  →  e.g. "202412345"
+    return `${year}${dni.slice(-5)}`;
   }
 }

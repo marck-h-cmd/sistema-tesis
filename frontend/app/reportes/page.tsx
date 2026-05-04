@@ -135,7 +135,7 @@ export default function ReportesPage() {
           </div>
 
           {/* Reportes Adicionales */}
-          <div className="mt-8">
+          {/* <div className="mt-8">
             <h2 className="text-xl font-bold mb-4">Reportes Adicionales</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>
@@ -174,7 +174,7 @@ export default function ReportesPage() {
                 </CardContent>
               </Card>
             </div>
-          </div>
+          </div> */}
         </main>
   
     </div>

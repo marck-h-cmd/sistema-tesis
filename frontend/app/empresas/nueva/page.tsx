@@ -9,6 +9,25 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ArrowLeft, Save } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { useFormValidation, validators } from '@/lib/hooks/useFormValidation';
+import { FieldWrapper } from '@/components/ui/FieldWrapper';
+
+// ─── Validation rules ─────────────────────────────────────────────────────────
+
+const rules = {
+  ruc: [validators.required('El RUC'), validators.ruc()],
+  razon_social: [
+    validators.required('La razón social'),
+    validators.minLength(3, 'La razón social'),
+    validators.maxLength(150, 'La razón social'),
+  ],
+  direccion: [validators.maxLength(200, 'La dirección')],
+  telefono: [validators.phone()],
+  email_contacto: [validators.email()],
+  representante: [validators.maxLength(100, 'El representante')],
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function NuevaEmpresaPage() {
   const router = useRouter();
@@ -24,10 +43,39 @@ export default function NuevaEmpresaPage() {
     convenio_activo: false,
   });
 
+  const { handleChange, handleBlur, validateAll, getFieldError, isFieldValid } =
+    useFormValidation(rules);
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  const stringValues = () =>
+    Object.fromEntries(
+      Object.entries(formData).map(([k, v]) => [k, String(v)]),
+    );
+
+  const onFieldChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    const newValue = type === 'checkbox' ? checked : value;
+    setFormData((prev) => ({ ...prev, [name]: newValue }));
+    if (type !== 'checkbox') {
+      handleChange(name, value, { ...stringValues(), [name]: value });
+    }
+  };
+
+  const onFieldBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
+    if (type !== 'checkbox') {
+      handleBlur(name, value, stringValues());
+    }
+  };
+
+  // ── Submit ─────────────────────────────────────────────────────────────────
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    if (!validateAll(stringValues())) return;
 
+    setIsLoading(true);
     try {
       await empresasApi.create(formData);
       toast.success('Empresa registrada exitosamente');
@@ -39,17 +87,14 @@ export default function NuevaEmpresaPage() {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
-  };
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div>
-      <Link href="/empresas" className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-6">
+      <Link
+        href="/empresas"
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-6"
+      >
         <ArrowLeft className="h-4 w-4 mr-2" />
         Volver a empresas
       </Link>
@@ -60,72 +105,102 @@ export default function NuevaEmpresaPage() {
             <CardTitle>Registrar Nueva Empresa</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} noValidate className="space-y-6">
+
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">RUC</label>
+                <FieldWrapper
+                  label="RUC"
+                  required
+                  error={getFieldError('ruc')}
+                  success={isFieldValid('ruc', formData.ruc)}
+                  hint="11 dígitos (10... personal / 20... jurídica)"
+                >
                   <Input
                     name="ruc"
                     value={formData.ruc}
-                    onChange={handleChange}
+                    onChange={onFieldChange}
+                    onBlur={onFieldBlur}
                     maxLength={11}
                     placeholder="20123456789"
-                    required
                   />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Razón Social</label>
+                </FieldWrapper>
+
+                <FieldWrapper
+                  label="Razón Social"
+                  required
+                  error={getFieldError('razon_social')}
+                  success={isFieldValid('razon_social', formData.razon_social)}
+                >
                   <Input
                     name="razon_social"
                     value={formData.razon_social}
-                    onChange={handleChange}
+                    onChange={onFieldChange}
+                    onBlur={onFieldBlur}
                     placeholder="Empresa XYZ S.A.C."
-                    required
                   />
-                </div>
+                </FieldWrapper>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Dirección</label>
+              <FieldWrapper
+                label="Dirección"
+                error={getFieldError('direccion')}
+                success={isFieldValid('direccion', formData.direccion)}
+              >
                 <Input
                   name="direccion"
                   value={formData.direccion}
-                  onChange={handleChange}
+                  onChange={onFieldChange}
+                  onBlur={onFieldBlur}
                   placeholder="Av. Principal 123"
                 />
-              </div>
+              </FieldWrapper>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Teléfono</label>
+                <FieldWrapper
+                  label="Teléfono"
+                  error={getFieldError('telefono')}
+                  success={isFieldValid('telefono', formData.telefono)}
+                  hint="9 dígitos (opcional)"
+                >
                   <Input
                     name="telefono"
                     value={formData.telefono}
-                    onChange={handleChange}
+                    onChange={onFieldChange}
+                    onBlur={onFieldBlur}
+                    maxLength={9}
                     placeholder="999888777"
                   />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Email de contacto</label>
+                </FieldWrapper>
+
+                <FieldWrapper
+                  label="Email de contacto"
+                  error={getFieldError('email_contacto')}
+                  success={isFieldValid('email_contacto', formData.email_contacto)}
+                >
                   <Input
                     name="email_contacto"
                     type="email"
                     value={formData.email_contacto}
-                    onChange={handleChange}
+                    onChange={onFieldChange}
+                    onBlur={onFieldBlur}
                     placeholder="contacto@empresa.com"
                   />
-                </div>
+                </FieldWrapper>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Representante</label>
+              <FieldWrapper
+                label="Representante"
+                error={getFieldError('representante')}
+                success={isFieldValid('representante', formData.representante)}
+              >
                 <Input
                   name="representante"
                   value={formData.representante}
-                  onChange={handleChange}
+                  onChange={onFieldChange}
+                  onBlur={onFieldBlur}
                   placeholder="Nombre del representante"
                 />
-              </div>
+              </FieldWrapper>
 
               <div className="flex items-center space-x-2">
                 <input
@@ -133,7 +208,7 @@ export default function NuevaEmpresaPage() {
                   name="convenio_activo"
                   id="convenio_activo"
                   checked={formData.convenio_activo}
-                  onChange={handleChange}
+                  onChange={onFieldChange}
                   className="h-4 w-4 rounded border-gray-300"
                 />
                 <label htmlFor="convenio_activo" className="text-sm font-medium">

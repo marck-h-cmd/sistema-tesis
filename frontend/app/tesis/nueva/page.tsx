@@ -11,10 +11,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { ArrowLeft, Save, Search, User, Check, ChevronDown, X } from 'lucide-react';
+import { ArrowLeft, Save, Search, User, Check, ChevronDown, X, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils/cn';
+import { useFormValidation, validators } from '@/lib/hooks/useFormValidation';
+import { FieldWrapper } from '@/components/ui/FieldWrapper';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EstudianteData {
   id: number;
@@ -22,40 +26,36 @@ interface EstudianteData {
   codigo_universitario: string;
   escuela_id: number;
   ciclo: string;
-  usuario: {
-    id: number;
-    nombres: string;
-    apellidos: string;
-    email: string;
-    dni: string;
-  };
-  escuela: {
-    id: number;
-    nombre: string;
-    facultad: string;
-  };
+  usuario: { id: number; nombres: string; apellidos: string; email: string; dni: string };
+  escuela: { id: number; nombre: string; facultad: string };
 }
 
 interface AsesorOption {
   id: number;
-  usuario: {
-    nombres: string;
-    apellidos: string;
-    email: string;
-  };
+  usuario: { nombres: string; apellidos: string; email: string };
   especialidad: string;
-  escuela: {
-    nombre: string;
-    facultad: string;
-  };
+  escuela: { nombre: string; facultad: string };
 }
+
+// ─── Validation rules ─────────────────────────────────────────────────────────
+
+const rules = {
+  titulo: [
+    validators.required('El título'),
+    validators.minLength(10, 'El título'),
+    validators.maxLength(300, 'El título'),
+  ],
+  resumen: [validators.maxLength(1000, 'El resumen')],
+  fecha_inicio: [],
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function NuevaTesisPage() {
   const router = useRouter();
   const { user, hasRole } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Estados del formulario
   const [formData, setFormData] = useState({
     titulo: '',
     resumen: '',
@@ -64,127 +64,143 @@ export default function NuevaTesisPage() {
     fecha_inicio: '',
   });
 
-  // Estados para el ComboBox de Asesor
+  // ComboBox states
   const [asesorSearch, setAsesorSearch] = useState('');
   const [asesorOpen, setAsesorOpen] = useState(false);
   const [asesorSeleccionado, setAsesorSeleccionado] = useState<AsesorOption | null>(null);
+  const [asesorTouched, setAsesorTouched] = useState(false);
 
-  // Estados para el ComboBox de Estudiante (solo admin/coordinador)
   const [estudianteSearch, setEstudianteSearch] = useState('');
   const [estudianteOpen, setEstudianteOpen] = useState(false);
   const [estudianteSeleccionado, setEstudianteSeleccionado] = useState<EstudianteData | null>(null);
+  const [estudianteTouched, setEstudianteTouched] = useState(false);
 
-  // Cargar el estudiante automáticamente si el usuario es estudiante
+  const { handleChange, handleBlur, validateAll, getFieldError, isFieldValid } =
+    useFormValidation(rules);
+
+  // ── Queries ────────────────────────────────────────────────────────────────
+
   const { data: miEstudiante, isLoading: loadingMiEstudiante } = useQuery({
-    
     queryKey: ['mi-estudiante', user?.id],
     queryFn: async () => {
-      // Primero obtenemos el estudiante por el usuario_id
-      // Como no tenemos el ID del estudiante, buscamos en la lista
       const res = await apiClient.get('/estudiantes');
-      const estudiantes = res.data.data as EstudianteData[];
-      const miEstudiante = estudiantes.find(
-        (e) => e.usuario_id === user?.id || e.usuario?.email === user?.email
-      );
-      return miEstudiante || null;
+      const lista = res.data.data as EstudianteData[];
+      return lista.find((e) => e.usuario_id === user?.id || e.usuario?.email === user?.email) ?? null;
     },
     enabled: !!user && hasRole('estudiante'),
   });
 
-  // Cargar lista de estudiantes (solo para admin/coordinador)
   const { data: estudiantes, isLoading: loadingEstudiantes } = useQuery({
     queryKey: ['estudiantes-list'],
     queryFn: async () => {
       const res = await apiClient.get('/estudiantes');
       return res.data.data as EstudianteData[];
     },
-    enabled: !hasRole('estudiante'), // Solo cargar si NO es estudiante
+    enabled: !hasRole('estudiante'),
   });
 
-  // Cargar lista de asesores
   const { data: asesores, isLoading: loadingAsesores } = useQuery({
     queryKey: ['asesores-list'],
     queryFn: async () => {
       const res = await apiClient.get('/asesores');
       return res.data.data as AsesorOption[];
     },
-    enabled: asesorOpen, // Solo cargar cuando el dropdown está abierto
+    enabled: asesorOpen,
   });
 
-  // Auto-seleccionar estudiante cuando se carga
   useEffect(() => {
     if (miEstudiante && hasRole('estudiante')) {
       setEstudianteSeleccionado(miEstudiante);
-      setFormData(prev => ({ ...prev, estudiante_id: miEstudiante.id }));
+      setFormData((prev) => ({ ...prev, estudiante_id: miEstudiante.id }));
     }
   }, [miEstudiante, hasRole]);
 
-  // Filtrar estudiantes (para admin/coordinador)
-  const filteredEstudiantes = estudiantes?.filter((e: EstudianteData) => {
-    const search = estudianteSearch.toLowerCase();
+  // ── Filtered lists ─────────────────────────────────────────────────────────
+
+  const filteredEstudiantes = estudiantes?.filter((e) => {
+    const s = estudianteSearch.toLowerCase();
     return (
       !estudianteSearch ||
-      e.usuario.nombres.toLowerCase().includes(search) ||
-      e.usuario.apellidos.toLowerCase().includes(search) ||
-      e.codigo_universitario.toLowerCase().includes(search) ||
-      e.usuario.dni.includes(search)
+      e.usuario.nombres.toLowerCase().includes(s) ||
+      e.usuario.apellidos.toLowerCase().includes(s) ||
+      e.codigo_universitario.toLowerCase().includes(s) ||
+      e.usuario.dni.includes(s)
     );
   });
 
-  // Filtrar asesores
-  const filteredAsesores = asesores?.filter((a: AsesorOption) => {
-    const search = asesorSearch.toLowerCase();
+  const filteredAsesores = asesores?.filter((a) => {
+    const s = asesorSearch.toLowerCase();
     return (
       !asesorSearch ||
-      a.usuario.nombres.toLowerCase().includes(search) ||
-      a.usuario.apellidos.toLowerCase().includes(search) ||
-      a.especialidad?.toLowerCase().includes(search) ||
-      a.escuela.nombre.toLowerCase().includes(search)
+      a.usuario.nombres.toLowerCase().includes(s) ||
+      a.usuario.apellidos.toLowerCase().includes(s) ||
+      a.especialidad?.toLowerCase().includes(s) ||
+      a.escuela.nombre.toLowerCase().includes(s)
     );
   });
+
+  // ── Derived error states for combo fields ──────────────────────────────────
+
+  const asesorError =
+    asesorTouched && !asesorSeleccionado ? 'Debe seleccionar un asesor' : null;
+  const estudianteError =
+    estudianteTouched && !hasRole('estudiante') && !estudianteSeleccionado
+      ? 'Debe seleccionar un estudiante'
+      : null;
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  const stringValues = () => ({
+    titulo: formData.titulo,
+    resumen: formData.resumen,
+    fecha_inicio: formData.fecha_inicio,
+  });
+
+  const onFieldChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    handleChange(name, value, { ...stringValues(), [name]: value });
+  };
+
+  const onFieldBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    handleBlur(name, value, stringValues());
+  };
+
+  // ── Submit ─────────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validaciones
-    if (!formData.estudiante_id) {
-      toast.error('No se pudo identificar al estudiante');
-      return;
-    }
+    // Trigger combo validations
+    setAsesorTouched(true);
+    setEstudianteTouched(true);
 
-    if (!asesorSeleccionado) {
-      toast.error('Debe seleccionar un asesor');
-      return;
-    }
+    const textValid = validateAll(stringValues());
+    const asesorValid = !!asesorSeleccionado;
+    const estudianteValid = hasRole('estudiante') ? !!miEstudiante : !!estudianteSeleccionado;
 
-    if (!formData.titulo.trim()) {
-      toast.error('El título es requerido');
-      return;
-    }
+    if (!textValid || !asesorValid || !estudianteValid) return;
 
     setIsSubmitting(true);
-
     try {
       await tesisApi.create({
         titulo: formData.titulo,
         resumen: formData.resumen || undefined,
         estudiante_id: formData.estudiante_id,
-        asesor_principal_id: asesorSeleccionado.id,
+        asesor_principal_id: asesorSeleccionado!.id,
         fecha_inicio: formData.fecha_inicio || undefined,
       });
       toast.success('Tesis registrada exitosamente');
       router.push('/tesis');
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Error al registrar tesis';
-      toast.error(message);
+      toast.error(error.response?.data?.message || 'Error al registrar tesis');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -201,51 +217,56 @@ export default function NuevaTesisPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">Registrar Nueva Tesis</CardTitle>
-              <CardDescription>
-                Complete los datos del proyecto de tesis
-              </CardDescription>
+              <CardDescription>Complete los datos del proyecto de tesis</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-8">
+              <form onSubmit={handleSubmit} noValidate className="space-y-8">
+
                 {/* Título */}
-                <div className="space-y-2">
-                  <Label htmlFor="titulo">
-                    Título de la tesis <span className="text-red-500">*</span>
-                  </Label>
+                <FieldWrapper
+                  label="Título de la tesis"
+                  required
+                  error={getFieldError('titulo')}
+                  success={isFieldValid('titulo', formData.titulo)}
+                  hint="Mínimo 10 caracteres"
+                >
                   <Input
                     id="titulo"
                     name="titulo"
                     value={formData.titulo}
-                    onChange={handleChange}
+                    onChange={onFieldChange}
+                    onBlur={onFieldBlur}
                     placeholder="Ej: Sistema de Gestión de Prácticas Preprofesionales"
                     className="text-lg"
-                    required
                   />
-                </div>
+                </FieldWrapper>
 
                 {/* Resumen */}
-                <div className="space-y-2">
-                  <Label htmlFor="resumen">Resumen (opcional)</Label>
+                <FieldWrapper
+                  label="Resumen"
+                  error={getFieldError('resumen')}
+                  success={isFieldValid('resumen', formData.resumen)}
+                >
                   <Textarea
                     id="resumen"
                     name="resumen"
                     value={formData.resumen}
-                    onChange={handleChange}
+                    onChange={onFieldChange}
+                    onBlur={onFieldBlur}
                     rows={4}
                     placeholder="Breve descripción del proyecto de tesis..."
                   />
-                </div>
+                </FieldWrapper>
 
-                {/* Sección Estudiante */}
-                <div className="space-y-2">
+                {/* Estudiante */}
+                <div className="space-y-1.5">
                   <Label>
                     Estudiante <span className="text-red-500">*</span>
                   </Label>
 
                   {hasRole('estudiante') ? (
-                    // === MODO ESTUDIANTE: Auto-seleccionado, solo lectura ===
                     loadingMiEstudiante ? (
-                      <div className="flex items-center justify-center p-4 border rounded-lg bg-gray-50">
+                      <div className="flex items-center p-4 border rounded-lg bg-gray-50">
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mr-3" />
                         <p className="text-sm text-muted-foreground">Cargando tu información...</p>
                       </div>
@@ -280,10 +301,10 @@ export default function NuevaTesisPage() {
                       </div>
                     )
                   ) : (
-                    // === MODO ADMIN/COORDINADOR: ComboBox con búsqueda ===
+                    // Admin/coordinador combobox
                     <div className="relative">
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
                         <input
                           type="text"
                           value={
@@ -294,58 +315,70 @@ export default function NuevaTesisPage() {
                           onChange={(e) => {
                             setEstudianteSearch(e.target.value);
                             setEstudianteSeleccionado(null);
-                            setFormData(prev => ({ ...prev, estudiante_id: 0 }));
+                            setFormData((prev) => ({ ...prev, estudiante_id: 0 }));
                             setEstudianteOpen(true);
                           }}
                           onFocus={() => setEstudianteOpen(true)}
-                          placeholder="Buscar estudiante por nombre, código o DNI..."
-                          className="w-full h-10 pl-10 pr-10 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onBlur={() => {
+                            setTimeout(() => setEstudianteOpen(false), 150);
+                            setEstudianteTouched(true);
+                          }}
+                          placeholder="Buscar por nombre, código o DNI..."
+                          className={cn(
+                            'w-full h-10 pl-10 pr-10 rounded-md border bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors',
+                            estudianteError ? 'border-red-400 focus-visible:ring-red-400' : 'border-input',
+                            estudianteTouched && estudianteSeleccionado && 'border-green-400',
+                          )}
                         />
-                        {estudianteSeleccionado && (
+                        {estudianteSeleccionado ? (
                           <button
                             type="button"
                             onClick={() => {
                               setEstudianteSeleccionado(null);
                               setEstudianteSearch('');
-                              setFormData(prev => ({ ...prev, estudiante_id: 0 }));
+                              setFormData((prev) => ({ ...prev, estudiante_id: 0 }));
                             }}
-                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-500"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
                           >
                             <X className="h-4 w-4" />
                           </button>
-                        )}
-                        {!estudianteSeleccionado && (
+                        ) : (
                           <ChevronDown
                             className={cn(
-                              "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 transition-transform",
-                              estudianteOpen && "rotate-180"
+                              'absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4 transition-transform',
+                              estudianteOpen && 'rotate-180',
                             )}
                           />
                         )}
                       </div>
 
-                      {/* Dropdown de estudiantes */}
+                      {estudianteError && (
+                        <p className="flex items-center gap-1 text-xs text-red-600 mt-1.5 animate-in slide-in-from-top-1 duration-150">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          {estudianteError}
+                        </p>
+                      )}
+
                       {estudianteOpen && !estudianteSeleccionado && (
                         <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
                           {loadingEstudiantes ? (
                             <div className="p-4 text-center">
                               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mx-auto" />
-                              <p className="text-sm text-muted-foreground mt-2">Cargando estudiantes...</p>
                             </div>
                           ) : filteredEstudiantes?.length === 0 ? (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                              {estudianteSearch ? 'No se encontraron estudiantes' : 'Escribe para buscar estudiantes'}
-                            </div>
+                            <p className="p-4 text-center text-sm text-muted-foreground">
+                              {estudianteSearch ? 'No se encontraron estudiantes' : 'Escribe para buscar'}
+                            </p>
                           ) : (
-                            filteredEstudiantes?.map((estudiante) => (
+                            filteredEstudiantes?.map((est) => (
                               <button
-                                key={estudiante.id}
+                                key={est.id}
                                 type="button"
-                                onClick={() => {
-                                  setEstudianteSeleccionado(estudiante);
+                                onMouseDown={() => {
+                                  setEstudianteSeleccionado(est);
                                   setEstudianteSearch('');
                                   setEstudianteOpen(false);
-                                  setFormData(prev => ({ ...prev, estudiante_id: estudiante.id }));
+                                  setFormData((prev) => ({ ...prev, estudiante_id: est.id }));
                                 }}
                                 className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0"
                               >
@@ -353,15 +386,12 @@ export default function NuevaTesisPage() {
                                   <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                                     <User className="h-4 w-4 text-blue-600" />
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">
-                                      {estudiante.usuario.nombres} {estudiante.usuario.apellidos}
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      {est.usuario.nombres} {est.usuario.apellidos}
                                     </p>
                                     <p className="text-xs text-muted-foreground">
-                                      {estudiante.codigo_universitario} • {estudiante.escuela.nombre} • {estudiante.ciclo} ciclo
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      DNI: {estudiante.usuario.dni}
+                                      {est.codigo_universitario} • {est.escuela.nombre}
                                     </p>
                                   </div>
                                 </div>
@@ -374,14 +404,14 @@ export default function NuevaTesisPage() {
                   )}
                 </div>
 
-                {/* ComboBox Asesor (para todos los roles) */}
-                <div className="space-y-2">
+                {/* Asesor combobox */}
+                <div className="space-y-1.5">
                   <Label>
                     Asesor Principal <span className="text-red-500">*</span>
                   </Label>
                   <div className="relative">
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
                       <input
                         type="text"
                         value={
@@ -392,58 +422,70 @@ export default function NuevaTesisPage() {
                         onChange={(e) => {
                           setAsesorSearch(e.target.value);
                           setAsesorSeleccionado(null);
-                          setFormData(prev => ({ ...prev, asesor_principal_id: 0 }));
+                          setFormData((prev) => ({ ...prev, asesor_principal_id: 0 }));
                           setAsesorOpen(true);
                         }}
                         onFocus={() => setAsesorOpen(true)}
+                        onBlur={() => {
+                          setTimeout(() => setAsesorOpen(false), 150);
+                          setAsesorTouched(true);
+                        }}
                         placeholder="Buscar asesor por nombre, especialidad o escuela..."
-                        className="w-full h-10 pl-10 pr-10 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={cn(
+                          'w-full h-10 pl-10 pr-10 rounded-md border bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors',
+                          asesorError ? 'border-red-400 focus-visible:ring-red-400' : 'border-input',
+                          asesorTouched && asesorSeleccionado && 'border-green-400',
+                        )}
                       />
-                      {asesorSeleccionado && (
+                      {asesorSeleccionado ? (
                         <button
                           type="button"
                           onClick={() => {
                             setAsesorSeleccionado(null);
                             setAsesorSearch('');
-                            setFormData(prev => ({ ...prev, asesor_principal_id: 0 }));
+                            setFormData((prev) => ({ ...prev, asesor_principal_id: 0 }));
                           }}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-500"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
                         >
                           <X className="h-4 w-4" />
                         </button>
-                      )}
-                      {!asesorSeleccionado && (
+                      ) : (
                         <ChevronDown
                           className={cn(
-                            "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 transition-transform",
-                            asesorOpen && "rotate-180"
+                            'absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4 transition-transform',
+                            asesorOpen && 'rotate-180',
                           )}
                         />
                       )}
                     </div>
 
-                    {/* Dropdown de asesores */}
+                    {asesorError && (
+                      <p className="flex items-center gap-1 text-xs text-red-600 mt-1.5 animate-in slide-in-from-top-1 duration-150">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        {asesorError}
+                      </p>
+                    )}
+
                     {asesorOpen && !asesorSeleccionado && (
                       <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {loadingAsesores ? (
                           <div className="p-4 text-center">
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mx-auto" />
-                            <p className="text-sm text-muted-foreground mt-2">Cargando asesores...</p>
                           </div>
                         ) : filteredAsesores?.length === 0 ? (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            {asesorSearch ? 'No se encontraron asesores' : 'Escribe para buscar asesores'}
-                          </div>
+                          <p className="p-4 text-center text-sm text-muted-foreground">
+                            {asesorSearch ? 'No se encontraron asesores' : 'Escribe para buscar'}
+                          </p>
                         ) : (
                           filteredAsesores?.map((asesor) => (
                             <button
                               key={asesor.id}
                               type="button"
-                              onClick={() => {
+                              onMouseDown={() => {
                                 setAsesorSeleccionado(asesor);
                                 setAsesorSearch('');
                                 setAsesorOpen(false);
-                                setFormData(prev => ({ ...prev, asesor_principal_id: asesor.id }));
+                                setFormData((prev) => ({ ...prev, asesor_principal_id: asesor.id }));
                               }}
                               className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0"
                             >
@@ -451,15 +493,12 @@ export default function NuevaTesisPage() {
                                 <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
                                   <User className="h-4 w-4 text-purple-600" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate">
+                                <div>
+                                  <p className="text-sm font-medium">
                                     {asesor.usuario.nombres} {asesor.usuario.apellidos}
                                   </p>
                                   <p className="text-xs text-muted-foreground">
                                     {asesor.especialidad || 'Sin especialidad'} • {asesor.escuela.nombre}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {asesor.escuela.facultad}
                                   </p>
                                 </div>
                               </div>
@@ -472,23 +511,20 @@ export default function NuevaTesisPage() {
                 </div>
 
                 {/* Fecha de inicio */}
-                <div className="space-y-2">
-                  <Label htmlFor="fecha_inicio">Fecha de inicio</Label>
+                <FieldWrapper label="Fecha de inicio" error={getFieldError('fecha_inicio')}>
                   <Input
                     id="fecha_inicio"
                     name="fecha_inicio"
                     type="date"
                     value={formData.fecha_inicio}
-                    onChange={handleChange}
+                    onChange={onFieldChange}
+                    onBlur={onFieldBlur}
                   />
-                </div>
+                </FieldWrapper>
 
-                {/* Botones */}
                 <div className="flex justify-end space-x-4 pt-4 border-t">
                   <Link href="/tesis">
-                    <Button type="button" variant="outline">
-                      Cancelar
-                    </Button>
+                    <Button type="button" variant="outline">Cancelar</Button>
                   </Link>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? (
