@@ -18,16 +18,23 @@ import {
   Clock, 
   Users,
   Building2,
-  Briefcase
+  Briefcase,
+  Eye,
+  Edit
 } from 'lucide-react';
 import { formatDate, formatDuration } from '@/lib/utils/formatDate';
+import { PracticaEditForm } from '@/components/forms/PracticaEditForm';
+import { Dialog } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
 export default function PracticasPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingPractica, setEditingPractica] = useState<any>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const { hasRole } = useAuth();
 
-  const { data: ofertas, isLoading } = useQuery({
+  const { data: ofertas, isLoading, refetch } = useQuery({
     queryKey: ['ofertas'],
     queryFn: () => ofertasApi.getAll().then(res => res.data.data),
   });
@@ -36,6 +43,30 @@ export default function PracticasPage() {
     oferta.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
     oferta.empresa.razon_social.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleEditPractica = async (data: any) => {
+    if (!editingPractica) return;
+
+    setIsEditing(true);
+    try {
+      await ofertasApi.update(editingPractica.id, data);
+      toast.success('Práctica actualizada exitosamente');
+      setEditingPractica(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al actualizar la práctica');
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const openEditModal = (practica: any) => {
+    setEditingPractica(practica);
+  };
+
+  const closeEditModal = () => {
+    setEditingPractica(null);
+  };
 
   const getEstadoBadge = (estado: string) => {
     const estados: Record<string, { color: string; label: string }> = {
@@ -103,56 +134,74 @@ export default function PracticasPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredOfertas?.map((oferta: any) => (
-                <Link key={oferta.id} href={`/practicas/${oferta.id}`}>
-                  <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold mb-1">{oferta.titulo}</h3>
-                          <p className="text-sm text-muted-foreground flex items-center">
-                            <Building2 className="h-4 w-4 mr-1" />
-                            {oferta.empresa.razon_social}
-                          </p>
-                        </div>
-                        {getEstadoBadge(oferta.estado)}
+                <Card key={oferta.id} className="hover:shadow-lg transition-shadow h-full">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold mb-1">{oferta.titulo}</h3>
+                        <p className="text-sm text-muted-foreground flex items-center">
+                          <Building2 className="h-4 w-4 mr-1" />
+                          {oferta.empresa.razon_social}
+                        </p>
                       </div>
+                      {getEstadoBadge(oferta.estado)}
+                    </div>
 
-                      <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-                        {oferta.descripcion}
-                      </p>
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                      {oferta.descripcion}
+                    </p>
 
-                      <div className="space-y-2">
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <MapPin className="h-4 w-4 mr-2" />
-                          {getModalidadBadge(oferta.modalidad)}
-                        </div>
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <Clock className="h-4 w-4 mr-2" />
-                          <span>
-                            {formatDuration(oferta.fecha_inicio, oferta.fecha_fin)}
+                    <div className="space-y-2">
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <MapPin className="h-4 w-4 mr-2" />
+                        {getModalidadBadge(oferta.modalidad)}
+                      </div>
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Clock className="h-4 w-4 mr-2" />
+                        <span>
+                          {formatDuration(oferta.fecha_inicio, oferta.fecha_fin)}
+                        </span>
+                      </div>
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Users className="h-4 w-4 mr-2" />
+                        <span>{oferta.vacantes} vacantes</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t">
+                      <div className="flex items-center justify-between text-sm mb-3">
+                        <span className="text-muted-foreground">
+                          Inicio: {formatDate(oferta.fecha_inicio)}
+                        </span>
+                        {oferta._count && (
+                          <span className="text-primary font-medium">
+                            {oferta._count.postulaciones} postulantes
                           </span>
-                        </div>
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <Users className="h-4 w-4 mr-2" />
-                          <span>{oferta.vacantes} vacantes</span>
-                        </div>
+                        )}
                       </div>
 
-                      <div className="mt-4 pt-4 border-t">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">
-                            Inicio: {formatDate(oferta.fecha_inicio)}
-                          </span>
-                          {oferta._count && (
-                            <span className="text-primary font-medium">
-                              {oferta._count.postulaciones} postulantes
-                            </span>
-                          )}
-                        </div>
+                      <div className="flex gap-2">
+                        <Link href={`/practicas/${oferta.id}`}>
+                          <Button variant="outline" size="sm" className="flex-1">
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver
+                          </Button>
+                        </Link>
+                        {(hasRole('admin') || hasRole('coordinador')) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditModal(oferta)}
+                            className="flex-1"
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Editar
+                          </Button>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}
@@ -177,6 +226,22 @@ export default function PracticasPage() {
           )}
         </main>
       {/* </div> */}
+
+      {/* Modal de edición */}
+      <Dialog
+        open={!!editingPractica}
+        onClose={closeEditModal}
+        title="Editar Práctica"
+      >
+        {editingPractica && (
+          <PracticaEditForm
+            practica={editingPractica}
+            onSubmit={handleEditPractica}
+            onCancel={closeEditModal}
+            isLoading={isEditing}
+          />
+        )}
+      </Dialog>
     </div>
   );
 }

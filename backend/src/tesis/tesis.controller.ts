@@ -153,7 +153,7 @@ async findAllByEstudiante(
   }
 
   @Put('avances/:avanceId')
-  @Roles(RolNombre.estudiante)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor)
   async updateAvance(
     @Param('avanceId') avanceId: string,
     @Body() updateAvanceDto: UpdateAvanceDto,
@@ -163,7 +163,7 @@ async findAllByEstudiante(
   }
 
   @Put('avances/:avanceId/revisar')
-  @Roles(RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor)
   async revisarAvance(
     @Param('avanceId') avanceId: string,
     @Body('estado') estado: string,

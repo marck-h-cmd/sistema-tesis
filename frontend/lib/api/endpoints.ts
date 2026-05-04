@@ -9,6 +9,7 @@ import type {
   OfertaPractica,
   Postulacion,
   Tesis,
+  Asesor,
   DashboardData,
 } from '../types';
 
@@ -39,6 +40,12 @@ export const empresasApi = {
   update: (id: number, data: any) => apiClient.put(`/empresas/${id}`, data),
   delete: (id: number) => apiClient.delete(`/empresas/${id}`),
   getEstadisticas: () => apiClient.get('/empresas/estadisticas'),
+};
+
+// Asesores
+export const asesoresApi = {
+  getAll: () => apiClient.get<ApiResponse<Asesor[]>>('/asesores'),
+  getOne: (id: number) => apiClient.get<ApiResponse<Asesor>>(`/asesores/${id}`),
 };
 
 // Ofertas
@@ -84,6 +91,10 @@ export const tesisApi = {
   crearActa: (id: number, data: any) => apiClient.post(`/tesis/${id}/acta`, data),
   getAvances: (id: number) => apiClient.get(`/tesis/${id}/avances`),
   registrarAvance: (id: number, data: any) => apiClient.post(`/tesis/${id}/avances`, data),
+  revisarAvance: (avanceId: number, estado: string, observaciones?: string) =>
+    apiClient.put(`/tesis/avances/${avanceId}/revisar`, { estado, observaciones }),
+  updateAvance: (avanceId: number, data: any) =>
+    apiClient.put(`/tesis/avances/${avanceId}`, data),
   getEstadisticas: () => apiClient.get('/tesis/estadisticas'),
 };
 

@@ -19,18 +19,48 @@ import {
   Phone, 
   MapPin,
   FileCheck,
-  Briefcase
+  Briefcase,
+  Edit
 } from 'lucide-react';
+import { EmpresaEditForm } from '@/components/forms/EmpresaEditForm';
+import { Dialog } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
 export default function EmpresasPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingEmpresa, setEditingEmpresa] = useState<any>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const { hasRole } = useAuth();
 
-  const { data: empresas, isLoading } = useQuery({
+  const { data: empresas, isLoading, refetch } = useQuery({
     queryKey: ['empresas'],
     queryFn: () => empresasApi.getAll().then(res => res.data.data),
   });
+
+  const handleEditEmpresa = async (data: any) => {
+    if (!editingEmpresa) return;
+
+    setIsEditing(true);
+    try {
+      await empresasApi.update(editingEmpresa.id, data);
+      toast.success('Empresa actualizada exitosamente');
+      setEditingEmpresa(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al actualizar la empresa');
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const openEditModal = (empresa: any) => {
+    setEditingEmpresa(empresa);
+  };
+
+  const closeEditModal = () => {
+    setEditingEmpresa(null);
+  };
 
   const filteredEmpresas = empresas?.filter((emp: any) =>
     emp.razon_social.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -127,12 +157,42 @@ export default function EmpresasPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Botón de editar para admins y coordinadores */}
+                  {(hasRole('admin') || hasRole('coordinador')) && (
+                    <div className="mt-4 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditModal(empresa)}
+                        className="w-full"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Editar
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
           </div>
         </main>
    
+      {/* Modal de edición */}
+      <Dialog
+        open={!!editingEmpresa}
+        onClose={closeEditModal}
+        title="Editar Empresa"
+      >
+        {editingEmpresa && (
+          <EmpresaEditForm
+            empresa={editingEmpresa}
+            onSubmit={handleEditEmpresa}
+            onCancel={closeEditModal}
+            isLoading={isEditing}
+          />
+        )}
+      </Dialog>
     </div>
   );
 }

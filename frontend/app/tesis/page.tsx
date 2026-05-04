@@ -15,9 +15,14 @@ import {
   GraduationCap,
   User,
   Calendar,
-  FileText
+  FileText,
+  Eye,
+  Edit
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils/formatDate';
+import { TesisEditForm } from '@/components/forms/TesisEditForm';
+import { Dialog } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
 const estadosTesis: Record<string, { color: string; label: string }> = {
   propuesta: { color: 'bg-blue-100 text-blue-800', label: 'Propuesta' },
@@ -28,6 +33,8 @@ const estadosTesis: Record<string, { color: string; label: string }> = {
 
 export default function TesisPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingTesis, setEditingTesis] = useState<any>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const { hasRole, user } = useAuth();
 
   console.log("user",user);
@@ -44,7 +51,7 @@ export default function TesisPage() {
   });
 
   // Query para obtener las tesis según el rol
-  const { data: tesis, isLoading: isLoadingTesis, error } = useQuery({
+  const { data: tesis, isLoading: isLoadingTesis, error, refetch } = useQuery({
     queryKey: ['tesis', hasRole('estudiante') ? `estudiante_${estudiante?.id}` : 'all'],
     queryFn: async () => {
       if (hasRole('estudiante')) {
@@ -62,6 +69,30 @@ export default function TesisPage() {
     },
     enabled: !hasRole('estudiante') || (hasRole('estudiante') && !!estudiante?.id),
   });
+
+  const handleEditTesis = async (data: any) => {
+    if (!editingTesis) return;
+
+    setIsEditing(true);
+    try {
+      await tesisApi.update(editingTesis.id, data);
+      toast.success('Tesis actualizada exitosamente');
+      setEditingTesis(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Error al actualizar la tesis');
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const openEditModal = (tesis: any) => {
+    setEditingTesis(tesis);
+  };
+
+  const closeEditModal = () => {
+    setEditingTesis(null);
+  };
 
   const isLoading = isLoadingEstudiante || isLoadingTesis;
 
@@ -131,64 +162,83 @@ export default function TesisPage() {
                   };
                   
                   return (
-                    <Link key={t.id} href={`/tesis/${t.id}`}>
-                      <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                        <CardContent className="p-6">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex-1">
-                              <h3 className="text-lg font-semibold mb-2 line-clamp-2">
-                                {t.titulo}
-                              </h3>
-                              <div className="flex items-center text-sm text-muted-foreground">
-                                <User className="h-4 w-4 mr-1" />
-                                {t.estudiante?.usuario?.nombres} {t.estudiante?.usuario?.apellidos}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between mt-4">
-                            <Badge className={estadoConfig.color}>
-                              {estadoConfig.label}
-                            </Badge>
+                    <Card key={t.id} className="hover:shadow-lg transition-shadow h-full">
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold mb-2 line-clamp-2">
+                              {t.titulo}
+                            </h3>
                             <div className="flex items-center text-sm text-muted-foreground">
-                              <Calendar className="h-4 w-4 mr-1" />
-                              {t.fecha_inicio ? formatDate(t.fecha_inicio) : 'Sin fecha'}
+                              <User className="h-4 w-4 mr-1" />
+                              {t.estudiante?.usuario?.nombres} {t.estudiante?.usuario?.apellidos}
                             </div>
                           </div>
+                        </div>
 
-                          {/* Escuela del estudiante */}
-                          {t.estudiante?.escuela && (
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              {t.estudiante.escuela.nombre}
-                            </div>
-                          )}
+                        <div className="flex items-center justify-between mt-4 mb-4">
+                          <Badge className={estadoConfig.color}>
+                            {estadoConfig.label}
+                          </Badge>
+                          <div className="flex items-center text-sm text-muted-foreground">
+                            <Calendar className="h-4 w-4 mr-1" />
+                            {t.fecha_inicio ? formatDate(t.fecha_inicio) : 'Sin fecha'}
+                          </div>
+                        </div>
 
-                          {/* Asesor principal */}
-                          {t.asesor_principal && (
-                            <div className="mt-4 pt-4 border-t">
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <GraduationCap className="h-4 w-4" />
-                                <span>
-                                  Asesor: {t.asesor_principal.usuario?.nombres} {t.asesor_principal.usuario?.apellidos}
-                                </span>
-                              </div>
-                            </div>
-                          )}
+                        {/* Escuela del estudiante */}
+                        {t.estudiante?.escuela && (
+                          <div className="mb-4 text-xs text-muted-foreground">
+                            {t.estudiante.escuela.nombre}
+                          </div>
+                        )}
 
-                          {/* Nota final */}
-                          {t.acta && t.acta.nota_final && (
-                            <div className="mt-4 pt-4 border-t">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium">Nota Final:</span>
-                                <span className="text-lg font-bold text-primary">
-                                  {t.acta.nota_final}
-                                </span>
-                              </div>
+                        {/* Asesor principal */}
+                        {t.asesor_principal && (
+                          <div className="mb-4 pb-4 border-b">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <GraduationCap className="h-4 w-4" />
+                              <span>
+                                Asesor: {t.asesor_principal.usuario?.nombres} {t.asesor_principal.usuario?.apellidos}
+                              </span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Nota final */}
+                        {t.acta && t.acta.nota_final && (
+                          <div className="mb-4 pb-4 border-b">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Nota Final:</span>
+                              <span className="text-lg font-bold text-primary">
+                                {t.acta.nota_final}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Botones de acción */}
+                        <div className="flex gap-2">
+                          <Link href={`/tesis/${t.id}`}>
+                            <Button variant="outline" size="sm" className="flex-1">
+                              <Eye className="h-4 w-4 mr-1" />
+                              Ver
+                            </Button>
+                          </Link>
+                          {(hasRole('admin') || hasRole('coordinador') || hasRole('asesor')) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditModal(t)}
+                              className="flex-1"
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Editar
+                            </Button>
                           )}
-                        </CardContent>
-                      </Card>
-                    </Link>
+                        </div>
+                      </CardContent>
+                    </Card>
                   );
                 })}
               </div>
@@ -216,6 +266,22 @@ export default function TesisPage() {
           </>
         )}
       </main>
+
+      {/* Modal de edición */}
+      <Dialog
+        open={!!editingTesis}
+        onClose={closeEditModal}
+        title="Editar Tesis"
+      >
+        {editingTesis && (
+          <TesisEditForm
+            tesis={editingTesis}
+            onSubmit={handleEditTesis}
+            onCancel={closeEditModal}
+            isLoading={isEditing}
+          />
+        )}
+      </Dialog>
     </div>
   );
 }

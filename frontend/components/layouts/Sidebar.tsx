@@ -14,6 +14,7 @@ import {
   FileText,
   LogOut,
   ChevronLeft,
+  CheckCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -24,6 +25,7 @@ interface SidebarProps {
 
 const menuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'coordinador'] },
+  { href: 'revision-avances', label: 'Revisión Avances', icon: CheckCircle, roles: ['admin', 'asesor', 'coordinador'] },
   { href: '/practicas', label: 'Prácticas', icon: Briefcase, roles: ['admin', 'coordinador', 'asesor', 'estudiante', 'empresa'] },
   { href: '/tesis', label: 'Tesis', icon: GraduationCap, roles: ['admin', 'coordinador', 'asesor', 'estudiante'] },
   { href: '/mis-postulaciones', label: 'Mis Postulaciones', icon: Briefcase, roles: ['estudiante'] },

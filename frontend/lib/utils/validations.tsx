@@ -39,7 +39,14 @@ export const tesisSchema = z.object({
   fecha_inicio: z.string().optional(),
 });
 
+export const avanceSchema = z.object({
+  tipo: z.string().min(3, 'Mínimo 3 caracteres'),
+  descripcion: z.string().min(20, 'Mínimo 20 caracteres'),
+  fecha_entrega: z.string().min(1, 'Fecha de entrega requerida'),
+});
+
 export type LoginFormData = z.infer<typeof loginSchema>;
 export type RegisterFormData = z.infer<typeof registerSchema>;
 export type OfertaFormData = z.infer<typeof ofertaSchema>;
 export type TesisFormData = z.infer<typeof tesisSchema>;
+export type AvanceFormData = z.infer<typeof avanceSchema>;

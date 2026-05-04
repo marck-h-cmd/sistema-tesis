@@ -26,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-
+  console.log('AuthProvider - Rendered, user:', user);
   useEffect(() => {
     const savedUser = Cookies.get('user');
     const token = Cookies.get('token');
