@@ -8,6 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { GraduationCap, Eye, EyeOff } from 'lucide-react';
 
+const TEST_CREDENTIALS = [
+  { label: 'Admin', email: 'admin@unitru.edu.pe', password: 'Admin123@' },
+  { label: 'Estudiante', email: 'carlos.lopez@unitru.edu.pe', password: 'Estu123@' },
+];
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,7 +25,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-
     try {
       await login({ email, password });
     } catch (err: any) {
@@ -28,6 +32,12 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fillCredentials = (cred: typeof TEST_CREDENTIALS[number]) => {
+    setEmail(cred.email);
+    setPassword(cred.password);
+    setError('');
   };
 
   return (
@@ -87,6 +97,30 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {/* Credenciales de prueba */}
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-md space-y-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Credenciales de prueba
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {TEST_CREDENTIALS.map((cred) => (
+                  <button
+                    key={cred.label}
+                    type="button"
+                    onClick={() => fillCredentials(cred)}
+                    className="flex items-center justify-between w-full px-3 py-2 rounded-md border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-300 transition-colors text-left group"
+                  >
+                    <span className="text-xs font-medium text-gray-700 group-hover:text-blue-700">
+                      {cred.label}
+                    </span>
+                    <span className="text-xs text-gray-400 group-hover:text-blue-500 font-mono truncate ml-2">
+                      {cred.email}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </CardContent>
 
           <CardFooter className="flex flex-col space-y-4">
@@ -100,12 +134,6 @@ export default function LoginPage() {
                 Registrarse
               </Link>
             </p>
-
-            <div className="mt-4 p-4 bg-gray-50 rounded-md text-xs text-gray-600">
-              <p className="font-semibold mb-2">Credenciales de prueba:</p>
-              <p>Admin: admin@unitru.edu.pe / Admin123@</p>
-              <p>Estudiante: carlos.lopez@unitru.edu.pe / Estu123@</p>
-            </div>
           </CardFooter>
         </form>
       </Card>
