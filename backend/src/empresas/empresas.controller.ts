@@ -40,6 +40,19 @@ export class EmpresasController {
     return { data: estadisticas };
   }
 
+  /** Validación de convenio por RUC (empresa ingresada / oferta). */
+  @Get('validar-convenio/ruc/:ruc')
+  @Roles(
+    RolNombre.admin,
+    RolNombre.coordinador,
+    RolNombre.estudiante,
+    RolNombre.asesor,
+  )
+  async validarConvenioPorRuc(@Param('ruc') ruc: string) {
+    const data = await this.empresasService.validarConvenioPorRuc(ruc);
+    return { data };
+  }
+
   @Get(':id')
   @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor)
   async findOne(@Param('id') id: string) {

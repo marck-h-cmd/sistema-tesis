@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {}
 
   async getResumenGeneral() {
     const [
@@ -224,6 +228,102 @@ async getEstadisticasPracticas() {
       postulaciones_exitosas: postulacionesExitosas,
       total_tesis: totalTesis,
       tesis_culminadas: tesisCulminadas,
+    };
+  }
+
+  /** Embudo: prácticas activas vs tesis en curso (métricas de coordinación). */
+  async getEmbudoConversion() {
+    const [
+      conPracticaActiva,
+      conTesisNoCulminada,
+      soloPracticasSinTesis,
+    ] = await Promise.all([
+      this.prisma.estudiante.count({
+        where: {
+          postulaciones: {
+            some: {
+              estado: { in: ['postulado', 'aceptado', 'en_curso'] },
+            },
+          },
+        },
+      }),
+      this.prisma.estudiante.count({
+        where: {
+          tesis: {
+            some: { estado: { not: 'culminado' } },
+          },
+        },
+      }),
+      this.prisma.estudiante.count({
+        where: {
+          tesis: { none: {} },
+          postulaciones: {
+            some: {
+              estado: { in: ['postulado', 'aceptado', 'en_curso', 'finalizado'] },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      estudiantes_en_fase_practicas_pipeline: conPracticaActiva,
+      estudiantes_en_fase_tesis_pipeline: conTesisNoCulminada,
+      estudiantes_con_practica_sin_tesis_registrada: soloPracticasSinTesis,
+    };
+  }
+
+  /** Tesis sin culminar con más de N meses sin actividad (avance o actualización). */
+  async getAlertasInactividadTesis() {
+    const meses =
+      this.configService.get<number>('tesis.mesesAlertaInactividad') ?? 12;
+    const limite = new Date();
+    limite.setMonth(limite.getMonth() - meses);
+
+    const tesis = await this.prisma.tesis.findMany({
+      where: { estado: { not: 'culminado' } },
+      include: {
+        estudiante: {
+          include: {
+            usuario: {
+              select: {
+                nombres: true,
+                apellidos: true,
+                email: true,
+              },
+            },
+          },
+        },
+        avances: { orderBy: { fecha_entrega: 'desc' }, take: 1 },
+      },
+    });
+
+    const alertas = tesis
+      .map((t) => {
+        const ultimoAvance = t.avances[0]?.fecha_entrega;
+        const referencia = ultimoAvance
+          ? new Date(ultimoAvance)
+          : new Date(t.updated_at);
+        return {
+          tesis_id: t.id,
+          titulo: t.titulo,
+          estado: t.estado,
+          estudiante: `${t.estudiante.usuario.apellidos}, ${t.estudiante.usuario.nombres}`,
+          email_estudiante: t.estudiante.usuario.email,
+          ultima_actividad: referencia.toISOString().slice(0, 10),
+        };
+      })
+      .filter((row) => new Date(row.ultima_actividad) < limite)
+      .sort(
+        (a, b) =>
+          new Date(a.ultima_actividad).getTime() -
+          new Date(b.ultima_actividad).getTime(),
+      );
+
+    return {
+      meses_umbral: meses,
+      total_alertas: alertas.length,
+      items: alertas,
     };
   }
 }

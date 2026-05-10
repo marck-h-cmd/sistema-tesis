@@ -10,6 +10,7 @@ import { SeguimientoModule } from './seguimiento/seguimiento.module';
 import { TesisModule } from './tesis/tesis.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { PrismaModule } from 'prisma/prisma.module';
 import configuration from './config/configuration';
 
@@ -30,6 +31,7 @@ import configuration from './config/configuration';
     TesisModule,
     DashboardModule,
     ReportesModule,
+    NotificacionesModule,
   ],
 })
 export class AppModule {}

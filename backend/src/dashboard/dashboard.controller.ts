@@ -40,6 +40,18 @@ export class DashboardController {
     return { data: await this.dashboardService.getIndicadoresRendimiento() };
   }
 
+  @Get('embudo')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async getEmbudo() {
+    return { data: await this.dashboardService.getEmbudoConversion() };
+  }
+
+  @Get('alertas-tesis-inactividad')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async getAlertasTesis() {
+    return { data: await this.dashboardService.getAlertasInactividadTesis() };
+  }
+
   @Get('completo')
   @Roles(RolNombre.admin, RolNombre.coordinador)
   async getDashboardCompleto() {

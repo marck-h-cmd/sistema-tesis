@@ -2,10 +2,16 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePostulacionDto } from './dto/create-postulacion.dto';
 import { UpdatePostulacionDto } from './dto/update-postulacion.dto';
+import { UpdateConvenioEspecificoDto } from './dto/update-convenio-especifico.dto';
+import { EmpresasService } from '../empresas/empresas.service';
+import { EstadoConvenioEspecifico } from '@prisma/client';
 
 @Injectable()
 export class PostulacionesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private empresasService: EmpresasService,
+  ) {}
 
   async findAll() {
     return this.prisma.postulacion.findMany({
@@ -145,20 +151,19 @@ export class PostulacionesService {
       throw new ConflictException('Ya te has postulado a esta oferta');
     }
 
-    // Verificar que la oferta esté abierta
-    const oferta = await this.prisma.ofertaPractica.findUnique({
+    const ofertaCompleta = await this.prisma.ofertaPractica.findUnique({
       where: { id: createPostulacionDto.oferta_id },
+      include: { empresa: true },
     });
 
-    if (!oferta) {
+    if (!ofertaCompleta) {
       throw new NotFoundException('Oferta no encontrada');
     }
 
-    if (oferta.estado !== 'abierta') {
+    if (ofertaCompleta.estado !== 'abierta') {
       throw new ConflictException('La oferta no está disponible');
     }
 
-    // Verificar vacantes
     const postulantesAceptados = await this.prisma.postulacion.count({
       where: {
         oferta_id: createPostulacionDto.oferta_id,
@@ -166,9 +171,17 @@ export class PostulacionesService {
       },
     });
 
-    if (postulantesAceptados >= oferta.vacantes) {
+    if (postulantesAceptados >= ofertaCompleta.vacantes) {
       throw new ConflictException('No hay vacantes disponibles');
     }
+
+    const convenioVigente = await this.empresasService.empresaTieneConvenioVigente(
+      ofertaCompleta.empresa_id,
+    );
+    const requiereConvenioEspecifico = !convenioVigente;
+    const estadoConvenioEspecifico = convenioVigente
+      ? EstadoConvenioEspecifico.no_aplica
+      : EstadoConvenioEspecifico.pendiente;
 
     // Crear la postulación
     const postulacion = await this.prisma.postulacion.create({
@@ -177,6 +190,8 @@ export class PostulacionesService {
         estudiante_id: createPostulacionDto.estudiante_id,
         estado: 'postulado',
         fecha_postulacion: new Date(),
+        requiere_convenio_especifico: requiereConvenioEspecifico,
+        estado_convenio_especifico: estadoConvenioEspecifico,
         ...(createPostulacionDto.asesor_academico_id && {
           asesor_academico_id: createPostulacionDto.asesor_academico_id,
         }),
@@ -202,6 +217,17 @@ export class PostulacionesService {
   async updateEstado(id: number, updatePostulacionDto: UpdatePostulacionDto) {
     const postulacion = await this.findOne(id);
 
+    if (updatePostulacionDto.estado === 'aceptado') {
+      if (
+        postulacion.requiere_convenio_especifico &&
+        postulacion.estado_convenio_especifico !== EstadoConvenioEspecifico.aprobado
+      ) {
+        throw new ConflictException(
+          'No se puede aceptar la postulación: el convenio específico debe estar aprobado.',
+        );
+      }
+    }
+
     const data: any = { estado: updatePostulacionDto.estado };
 
     // Si se acepta la postulación, crear seguimiento
@@ -215,7 +241,7 @@ export class PostulacionesService {
           data: {
             postulacion_id: id,
             horas_cumplidas: 0,
-            horas_totales: 300,
+            horas_totales: 600,
             evaluacion: 'pendiente',
           },
         });
@@ -242,6 +268,37 @@ export class PostulacionesService {
     });
 
     return updatedPostulacion;
+  }
+
+  async updateConvenioEspecifico(
+    id: number,
+    dto: UpdateConvenioEspecificoDto,
+  ) {
+    const postulacion = await this.findOne(id);
+
+    if (!postulacion.requiere_convenio_especifico) {
+      throw new ConflictException(
+        'Esta postulación no requiere trámite de convenio específico.',
+      );
+    }
+
+    return this.prisma.postulacion.update({
+      where: { id },
+      data: { estado_convenio_especifico: dto.estado },
+      include: {
+        oferta: {
+          include: { empresa: true },
+        },
+        estudiante: {
+          include: {
+            usuario: {
+              select: { nombres: true, apellidos: true, email: true },
+            },
+          },
+        },
+        seguimiento: true,
+      },
+    });
   }
 
   async asignarAsesor(postulacionId: number, asesorId: number) {

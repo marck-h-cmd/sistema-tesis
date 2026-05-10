@@ -1,11 +1,17 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEstudianteDto } from './dto/create-estudiante.dto';
 import { UpdateEstudianteDto } from './dto/update-estudiante.dto';
+import { PppGateService } from '../ppp/ppp-gate.service';
 
 @Injectable()
 export class EstudiantesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private pppGate: PppGateService,
+    private configService: ConfigService,
+  ) {}
 
   async findAll() {
     return this.prisma.estudiante.findMany({
@@ -263,5 +269,63 @@ export class EstudiantesService {
         acta: true,
       },
     });
+  }
+
+  /** Estado de gates PPP/Tesis para el frontend (bloqueos y flags). */
+  async getEstadoModulos(estudianteId: number) {
+    await this.findOne(estudianteId);
+
+    const habilitacion =
+      await this.pppGate.getDetalleHabilitacionTesis(estudianteId);
+
+    const postulacionActiva = await this.prisma.postulacion.findFirst({
+      where: {
+        estudiante_id: estudianteId,
+        estado: { in: ['postulado', 'aceptado', 'en_curso'] },
+      },
+      include: { seguimiento: true, oferta: { include: { empresa: true } } },
+      orderBy: { fecha_postulacion: 'desc' },
+    });
+
+    const umbralRevision =
+      this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
+      600;
+
+    const horasMin =
+      postulacionActiva?.seguimiento?.horas_cumplidas != null
+        ? {
+            cumplidas: postulacionActiva.seguimiento.horas_cumplidas,
+            totales: postulacionActiva.seguimiento.horas_totales,
+            umbral_revision_informe: umbralRevision,
+            puede_solicitar_revision_informe_final:
+              postulacionActiva.seguimiento.horas_cumplidas >= umbralRevision,
+          }
+        : null;
+
+    return {
+      ...habilitacion,
+      modulo_tesis_desbloqueado: habilitacion.puede_registrar_tesis,
+      postulacion_practica_activa: postulacionActiva
+        ? {
+            id: postulacionActiva.id,
+            estado: postulacionActiva.estado,
+            requiere_convenio_especifico:
+              postulacionActiva.requiere_convenio_especifico,
+            estado_convenio_especifico:
+              postulacionActiva.estado_convenio_especifico,
+          }
+        : null,
+      seguimiento_practica: postulacionActiva?.seguimiento
+        ? {
+            id: postulacionActiva.seguimiento.id,
+            horas_cumplidas: postulacionActiva.seguimiento.horas_cumplidas,
+            horas_totales: postulacionActiva.seguimiento.horas_totales,
+            solicitud_revision_informe_final:
+              postulacionActiva.seguimiento.solicitud_revision_informe_final,
+            evaluacion: postulacionActiva.seguimiento.evaluacion,
+          }
+        : null,
+      horas_resumen: horasMin,
+    };
   }
 }

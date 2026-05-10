@@ -11,7 +11,7 @@ export class CreateSeguimientoDto {
   @IsOptional()
   horas_cumplidas?: number;
 
-  @ApiProperty({ example: 300 })
+  @ApiProperty({ example: 600 })
   @IsInt()
   @IsOptional()
   horas_totales?: number;

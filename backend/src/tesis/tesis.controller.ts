@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
 import { TesisService } from './tesis.service';
 import { AvancesService } from './avances.service';
@@ -19,7 +20,13 @@ import { UpdateAvanceDto } from './dto/update-avance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RolNombre, EstadoTesis } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import {
+  RegistrarReciboTurnitinDto,
+  RegistrarSimilitudTurnitinDto,
+} from './dto/turnitin.dto';
 
 @Controller('tesis')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -27,6 +34,7 @@ export class TesisController {
   constructor(
     private readonly tesisService: TesisService,
     private readonly avancesService: AvancesService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get()
@@ -60,6 +68,43 @@ async findAllByEstudiante(
   async getEstadisticas() {
     const estadisticas = await this.tesisService.getEstadisticas();
     return { data: estadisticas };
+  }
+
+  @Put(':id/turnitin/recibo')
+  @Roles(RolNombre.estudiante)
+  async registrarReciboTurnitin(
+    @Param('id') id: string,
+    @Body() dto: RegistrarReciboTurnitinDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const estudiante = await this.prisma.estudiante.findUnique({
+      where: { usuario_id: user.id },
+    });
+    if (!estudiante) {
+      throw new NotFoundException('Estudiante no encontrado');
+    }
+    const tesis = await this.tesisService.registrarReciboTurnitin(
+      +id,
+      dto.recibo_url,
+      estudiante.id,
+    );
+    return { data: tesis, message: 'Recibo de Turnitin registrado' };
+  }
+
+  @Put(':id/turnitin/similitud')
+  @Roles(RolNombre.asesor, RolNombre.admin, RolNombre.coordinador)
+  async registrarSimilitudTurnitin(
+    @Param('id') id: string,
+    @Body() dto: RegistrarSimilitudTurnitinDto,
+    @CurrentUser() user: { id: number; roles: string[] },
+  ) {
+    const tesis = await this.tesisService.registrarSimilitudTurnitin(
+      +id,
+      dto.porcentaje,
+      user.id,
+      user.roles,
+    );
+    return { data: tesis, message: 'Similitud Turnitin registrada' };
   }
 
   @Get(':id')
@@ -128,6 +173,7 @@ async findAllByEstudiante(
       lugar?: string;
       nota_final?: number;
       archivo_acta_pdf?: string;
+      calificaciones_jurado?: object;
     },
   ) {
     const acta = await this.tesisService.crearActa(+id, actaData);

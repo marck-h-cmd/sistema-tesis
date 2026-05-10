@@ -270,6 +270,8 @@ export class ReportesService {
               <div class="value value-normal">
                 ${this.escapeHtml(tesis.estudiante?.usuario?.apellidos)}, ${this.escapeHtml(tesis.estudiante?.usuario?.nombres)}
               </div>
+              <div class="label" style="margin-top: 6px;">Código universitario</div>
+              <div class="value value-normal">${this.escapeHtml(tesis.estudiante?.codigo_universitario)}</div>
               <div class="label" style="margin-top: 6px;">DNI / Email</div>
               <div class="value value-normal">
                 ${this.escapeHtml(tesis.estudiante?.usuario?.dni)} / ${this.escapeHtml(tesis.estudiante?.usuario?.email)}
@@ -935,6 +937,89 @@ export class ReportesService {
     });
 
     return pdf;
+  }
+
+  async generarActaFirmaJurados(tesisId: number) {
+    const tesis = await this.prisma.tesis.findUnique({
+      where: { id: tesisId },
+      include: {
+        estudiante: { include: { usuario: true } },
+        asesor_principal: { include: { usuario: true } },
+        jurados: {
+          include: {
+            asesor: { include: { usuario: true } },
+          },
+        },
+        acta: true,
+      },
+    });
+
+    if (!tesis) {
+      throw new NotFoundException(`Tesis con ID ${tesisId} no encontrada`);
+    }
+
+    const filasJurado =
+      tesis.jurados?.length > 0
+        ? tesis.jurados
+            .map(
+              (j) => `
+            <tr>
+              <td>${this.escapeHtml(j.asesor?.usuario?.apellidos)}, ${this.escapeHtml(j.asesor?.usuario?.nombres)}</td>
+              <td>${this.escapeHtml(j.rol)}</td>
+              <td style="height: 36px; border-bottom: 1px solid #111;">&nbsp;</td>
+              <td style="height: 36px; border-bottom: 1px solid #111;">&nbsp;</td>
+            </tr>`,
+            )
+            .join('')
+        : `<tr><td colspan="4">(Jurado pendiente de asignación en el sistema)</td></tr>`;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          body { font-family: Arial, sans-serif; font-size: 12px; color: #111; }
+          h1 { text-align: center; font-size: 16px; }
+          .meta { margin: 12px 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+          th { background: #1a365d; color: #fff; }
+          .firma { min-height: 40px; }
+        </style>
+      </head>
+      <body>
+        <h1>Acta de sustentación — campos para calificación y firma del jurado</h1>
+        <p class="meta"><strong>Programa / trámite tipo FUT (referencia UNT):</strong> documento generado para completar y firmar en original.</p>
+        <div class="meta">
+          <div><strong>Estudiante:</strong> ${this.escapeHtml(tesis.estudiante?.usuario?.apellidos)}, ${this.escapeHtml(tesis.estudiante?.usuario?.nombres)} — <strong>Código:</strong> ${this.escapeHtml(tesis.estudiante?.codigo_universitario)}</div>
+          <div><strong>Tema:</strong> ${this.escapeHtml(tesis.titulo)}</div>
+          <div><strong>Asesor:</strong> ${this.escapeHtml(tesis.asesor_principal?.usuario?.apellidos)}, ${this.escapeHtml(tesis.asesor_principal?.usuario?.nombres)}</div>
+          ${
+            tesis.acta
+              ? `<div><strong>Fecha sustentación:</strong> ${this.formatFechaCorta(tesis.acta.fecha as any)} — <strong>Lugar:</strong> ${this.escapeHtml(tesis.acta.lugar || '-')}</div>`
+              : ''
+          }
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Jurado</th>
+              <th>Rol</th>
+              <th>Calificación / voto (llenar)</th>
+              <th>Firma</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasJurado}
+          </tbody>
+        </table>
+        <p style="margin-top: 20px;">Nota final (secretaría / acta oficial): __________________</p>
+      </body>
+      </html>
+    `;
+
+    return this.generatePDF(htmlContent);
   }
 
   async getHistorialReportes() {

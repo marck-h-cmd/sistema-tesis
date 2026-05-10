@@ -16,6 +16,7 @@ import { PostulacionesService } from './postulaciones.service';
 import { CreateOfertaDto } from './dto/create-oferta.dto';
 import { UpdateOfertaDto } from './dto/update-oferta.dto';
 import { UpdatePostulacionDto } from './dto/update-postulacion.dto';
+import { UpdateConvenioEspecificoDto } from './dto/update-convenio-especifico.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -146,6 +147,19 @@ export class OfertasController {
       updatePostulacionDto,
     );
     return { data: postulacion, message: 'Estado actualizado exitosamente' };
+  }
+
+  @Put('postulaciones/:postulacionId/convenio-especifico')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async updateConvenioEspecifico(
+    @Param('postulacionId', ParseIntPipe) postulacionId: number,
+    @Body() dto: UpdateConvenioEspecificoDto,
+  ) {
+    const postulacion = await this.postulacionesService.updateConvenioEspecifico(
+      postulacionId,
+      dto,
+    );
+    return { data: postulacion, message: 'Estado de convenio específico actualizado' };
   }
 
   @Post('postulaciones/:postulacionId/asignar-asesor/:asesorId')

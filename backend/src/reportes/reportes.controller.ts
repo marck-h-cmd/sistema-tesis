@@ -36,6 +36,24 @@ export class ReportesController {
     res.end(pdf);
   }
 
+  @Get('tesis/:id/acta-firma-jurados')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  async descargarActaFirmaJurados(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const pdf = await this.reportesService.generarActaFirmaJurados(id);
+    const fecha = new Date().toISOString().split('T')[0];
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="tesis-${id}-acta-firma-jurados-${fecha}.pdf"`,
+      'Content-Length': pdf.length.toString(),
+    });
+
+    res.end(pdf);
+  }
+
   @Get('tesis/:id/descargar')
   @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
   async descargarDocumentoTesis(

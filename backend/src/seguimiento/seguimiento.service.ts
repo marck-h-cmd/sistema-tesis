@@ -1,12 +1,17 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSeguimientoDto } from './dto/create-seguimiento.dto';
 import { UpdateSeguimientoDto } from './dto/update-seguimiento.dto';
+import { CreateReporteMensualDto } from './dto/create-reporte-mensual.dto';
 import { EstadoPostulacion } from '@prisma/client';
 
 @Injectable()
 export class SeguimientoService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {}
 
   async findAll(filters?: { estado?: string; asesor_id?: number }) {
     const where: any = {};
@@ -138,8 +143,16 @@ export class SeguimientoService {
       throw new ConflictException('La postulación no está activa para seguimiento');
     }
 
+    const horasTotales =
+      createSeguimientoDto.horas_totales ??
+      this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
+      600;
+
     return this.prisma.seguimientoPractica.create({
-      data: createSeguimientoDto,
+      data: {
+        ...createSeguimientoDto,
+        horas_totales: horasTotales,
+      },
     });
   }
 
@@ -249,13 +262,86 @@ export class SeguimientoService {
         ? seguimientos.reduce((acc, s) => acc + s.horas_cumplidas, 0) / totalEstudiantes
         : 0;
 
+    const horasCfg =
+      this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
+      600;
+
     return {
       total_estudiantes_practica: totalEstudiantes,
       practicas_completadas: completados,
       practicas_en_progreso: enProgreso,
       promedio_horas_cumplidas: Math.round(promedioHoras),
-      horas_totales_requeridas: 300,
+      horas_totales_requeridas: horasCfg,
     };
+  }
+
+  async registrarReporteMensual(
+    seguimientoId: number,
+    dto: CreateReporteMensualDto,
+  ) {
+    await this.findOne(seguimientoId);
+
+    const row = await this.prisma.reporteMensualPractica.upsert({
+      where: {
+        seguimiento_id_anio_mes: {
+          seguimiento_id: seguimientoId,
+          anio: dto.anio,
+          mes: dto.mes,
+        },
+      },
+      create: {
+        seguimiento_id: seguimientoId,
+        anio: dto.anio,
+        mes: dto.mes,
+        horas_reportadas: dto.horas_reportadas,
+        archivo_url: dto.archivo_url,
+        observaciones: dto.observaciones,
+      },
+      update: {
+        horas_reportadas: dto.horas_reportadas,
+        archivo_url: dto.archivo_url,
+        observaciones: dto.observaciones,
+      },
+    });
+
+    const agg = await this.prisma.reporteMensualPractica.aggregate({
+      where: { seguimiento_id: seguimientoId },
+      _sum: { horas_reportadas: true },
+    });
+    const totalReportado = agg._sum.horas_reportadas ?? 0;
+
+    await this.prisma.seguimientoPractica.update({
+      where: { id: seguimientoId },
+      data: { horas_cumplidas: totalReportado },
+    });
+
+    return row;
+  }
+
+  async listarReportesMensuales(seguimientoId: number) {
+    await this.findOne(seguimientoId);
+    return this.prisma.reporteMensualPractica.findMany({
+      where: { seguimiento_id: seguimientoId },
+      orderBy: [{ anio: 'desc' }, { mes: 'desc' }],
+    });
+  }
+
+  async solicitarRevisionInformeFinal(seguimientoId: number) {
+    const seguimiento = await this.findOne(seguimientoId);
+    const horasMin =
+      this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
+      600;
+
+    if (seguimiento.horas_cumplidas < horasMin) {
+      throw new ConflictException(
+        `No alcanza el mínimo de ${horasMin} horas cumplidas para solicitar la revisión del informe final.`,
+      );
+    }
+
+    return this.prisma.seguimientoPractica.update({
+      where: { id: seguimientoId },
+      data: { solicitud_revision_informe_final: true },
+    });
   }
 
   async getReportePorEstudiante(estudianteId: number) {

@@ -11,6 +11,7 @@ import {
 import { SeguimientoService } from './seguimiento.service';
 import { CreateSeguimientoDto } from './dto/create-seguimiento.dto';
 import { UpdateSeguimientoDto } from './dto/update-seguimiento.dto';
+import { CreateReporteMensualDto } from './dto/create-reporte-mensual.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -39,6 +40,33 @@ export class SeguimientoController {
   async getEstadisticas() {
     const estadisticas = await this.seguimientoService.getEstadisticasHoras();
     return { data: estadisticas };
+  }
+
+  @Post(':id/reportes-mensuales')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  async registrarReporteMensual(
+    @Param('id') id: string,
+    @Body() dto: CreateReporteMensualDto,
+  ) {
+    const row = await this.seguimientoService.registrarReporteMensual(+id, dto);
+    return { data: row, message: 'Reporte mensual registrado' };
+  }
+
+  @Get(':id/reportes-mensuales')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  async listarReportesMensuales(@Param('id') id: string) {
+    const rows = await this.seguimientoService.listarReportesMensuales(+id);
+    return { data: rows };
+  }
+
+  @Post(':id/solicitar-revision-informe-final')
+  @Roles(RolNombre.estudiante)
+  async solicitarRevisionInformeFinal(@Param('id') id: string) {
+    const seg = await this.seguimientoService.solicitarRevisionInformeFinal(+id);
+    return {
+      data: seg,
+      message: 'Solicitud de revisión de informe final registrada',
+    };
   }
 
   @Get(':id')
