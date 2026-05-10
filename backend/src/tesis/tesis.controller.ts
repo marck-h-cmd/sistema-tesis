@@ -27,6 +27,13 @@ import {
   RegistrarReciboTurnitinDto,
   RegistrarSimilitudTurnitinDto,
 } from './dto/turnitin.dto';
+import { SubirDocumentoTesisDto } from './dto/subir-documento-tesis.dto';
+import {
+  CrearPagoTesisDto,
+  CargarComprobantePagoDto,
+  VerificarPagoTesisDto,
+} from './dto/pago-tesis.dto';
+import { RevisionJuradoObservacionesDto } from './dto/revision-jurado.dto';
 
 @Controller('tesis')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -89,6 +96,129 @@ async findAllByEstudiante(
       estudiante.id,
     );
     return { data: tesis, message: 'Recibo de Turnitin registrado' };
+  }
+
+  @Post(':id/documentos')
+  @Roles(RolNombre.estudiante)
+  async subirDocumento(
+    @Param('id') id: string,
+    @Body() dto: SubirDocumentoTesisDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const doc = await this.tesisService.subirDocumentoTesis(+id, dto, user.id);
+    return { data: doc, message: 'Documento registrado' };
+  }
+
+  @Post(':id/pagos')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async crearPago(
+    @Param('id') id: string,
+    @Body() dto: CrearPagoTesisDto,
+  ) {
+    const row = await this.tesisService.crearPagoTesis(+id, dto);
+    return { data: row, message: 'Concepto de pago registrado' };
+  }
+
+  @Put(':id/pagos/:pagoId/comprobante')
+  @Roles(RolNombre.estudiante)
+  async cargarComprobante(
+    @Param('id') id: string,
+    @Param('pagoId') pagoId: string,
+    @Body() dto: CargarComprobantePagoDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const row = await this.tesisService.cargarComprobantePagoTesis(
+      +id,
+      +pagoId,
+      dto,
+      user.id,
+    );
+    return { data: row, message: 'Comprobante cargado' };
+  }
+
+  @Put(':id/pagos/:pagoId/verificar')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async verificarPago(
+    @Param('id') id: string,
+    @Param('pagoId') pagoId: string,
+    @Body() dto: VerificarPagoTesisDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const row = await this.tesisService.verificarPagoTesis(
+      +id,
+      +pagoId,
+      dto,
+      user.id,
+    );
+    return { data: row, message: 'Pago actualizado por administración' };
+  }
+
+  @Post(':id/jurados/:juradoTesisId/revision/observaciones')
+  @Roles(RolNombre.asesor)
+  async juradoObservaciones(
+    @Param('id') id: string,
+    @Param('juradoTesisId') juradoTesisId: string,
+    @Body() dto: RevisionJuradoObservacionesDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const row = await this.tesisService.juradoRegistrarObservaciones(
+      +id,
+      +juradoTesisId,
+      user.id,
+      dto,
+    );
+    return { data: row, message: 'Observaciones registradas' };
+  }
+
+  @Post(':id/jurados/:juradoTesisId/revision/conforme')
+  @Roles(RolNombre.asesor)
+  async juradoConforme(
+    @Param('id') id: string,
+    @Param('juradoTesisId') juradoTesisId: string,
+    @CurrentUser() user: { id: number },
+  ) {
+    const row = await this.tesisService.juradoMarcarConforme(
+      +id,
+      +juradoTesisId,
+      user.id,
+    );
+    return { data: row, message: 'Conformidad registrada' };
+  }
+
+  @Get(':id/cierre/checklist')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
+  async checklistCierre(@Param('id') id: string) {
+    const data = await this.tesisService.construirChecklistCierre(+id);
+    return { data };
+  }
+
+  @Post(':id/cierre/validar-expedito')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async validarExpedito(@Param('id') id: string) {
+    const row = await this.tesisService.validarExpedito(+id);
+    return { data: row, message: 'Tesis marcada como expedita' };
+  }
+
+  @Get(':id/sustentacion/gate')
+  @Roles(
+    RolNombre.admin,
+    RolNombre.coordinador,
+    RolNombre.secretaria,
+    RolNombre.estudiante,
+  )
+  async gateSustentacion(@Param('id') id: string) {
+    const data = await this.tesisService.gateProgramarSustentacion(+id);
+    return { data };
+  }
+
+  @Put(':id/sustentacion/programar')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
+  async programarSustentacion(
+    @Param('id') id: string,
+    @Body('fecha') fecha: string,
+  ) {
+    const row = await this.tesisService.programarSustentacion(+id, fecha);
+    return { data: row, message: 'Fecha de sustentación programada' };
   }
 
   @Put(':id/turnitin/similitud')

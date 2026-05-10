@@ -4,7 +4,7 @@ import { CreatePostulacionDto } from './dto/create-postulacion.dto';
 import { UpdatePostulacionDto } from './dto/update-postulacion.dto';
 import { UpdateConvenioEspecificoDto } from './dto/update-convenio-especifico.dto';
 import { EmpresasService } from '../empresas/empresas.service';
-import { EstadoConvenioEspecifico } from '@prisma/client';
+import { EstadoConvenioEspecifico, EstadoPractica } from '@prisma/client';
 
 @Injectable()
 export class PostulacionesService {
@@ -48,7 +48,7 @@ export class PostulacionesService {
             },
           },
         },
-        seguimiento: true,
+        practica: true,
       },
       orderBy: { fecha_postulacion: 'desc' },
     });
@@ -74,7 +74,7 @@ export class PostulacionesService {
             usuario: true,
           },
         },
-        seguimiento: true,
+        practica: true,
       },
     });
 
@@ -102,7 +102,7 @@ export class PostulacionesService {
             },
           },
         },
-        seguimiento: true,
+        practica: true,
         asesor_academico: {
           include: {
             usuario: {
@@ -230,25 +230,25 @@ export class PostulacionesService {
 
     const data: any = { estado: updatePostulacionDto.estado };
 
-    // Si se acepta la postulación, crear seguimiento
     if (updatePostulacionDto.estado === 'aceptado') {
-      const existingSeguimiento = await this.prisma.seguimientoPractica.findUnique({
+      const existingPractica = await this.prisma.practica.findUnique({
         where: { postulacion_id: id },
       });
 
-      if (!existingSeguimiento) {
-        await this.prisma.seguimientoPractica.create({
+      if (!existingPractica) {
+        await this.prisma.practica.create({
           data: {
+            estudiante_id: postulacion.estudiante_id,
             postulacion_id: id,
+            asesor_id: postulacion.asesor_academico_id ?? undefined,
             horas_cumplidas: 0,
-            horas_totales: 600,
-            evaluacion: 'pendiente',
+            horas_totales: 300,
+            estado: EstadoPractica.plan_pendiente,
           },
         });
       }
     }
 
-    // Si se rechaza o finaliza, actualizar estado
     const updatedPostulacion = await this.prisma.postulacion.update({
       where: { id },
       data,
@@ -263,7 +263,7 @@ export class PostulacionesService {
             usuario: true,
           },
         },
-        seguimiento: true,
+        practica: true,
       },
     });
 
@@ -296,7 +296,7 @@ export class PostulacionesService {
             },
           },
         },
-        seguimiento: true,
+        practica: true,
       },
     });
   }
@@ -329,6 +329,10 @@ export class PostulacionesService {
         where: { id: postulacionId },
         data: { asesor_academico_id: asesorId },
       });
+      await this.prisma.practica.updateMany({
+        where: { postulacion_id: postulacionId },
+        data: { asesor_id: asesorId },
+      });
     } else {
       // Crear asignación
       result = await this.prisma.asesorPostulacion.create({
@@ -349,6 +353,10 @@ export class PostulacionesService {
       await this.prisma.postulacion.update({
         where: { id: postulacionId },
         data: { asesor_academico_id: asesorId },
+      });
+      await this.prisma.practica.updateMany({
+        where: { postulacion_id: postulacionId },
+        data: { asesor_id: asesorId },
       });
     }
 
@@ -389,7 +397,7 @@ export class PostulacionesService {
             escuela: true,
           },
         },
-        seguimiento: true,
+        practica: true,
         asesor_academico: {
           include: {
             usuario: {

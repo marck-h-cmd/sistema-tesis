@@ -10,7 +10,7 @@ export default () => ({
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   practicas: {
     /** Horas mínimas acumuladas para habilitar "Solicitar revisión de informe final" */
-    horasMinimasRevisionInforme: parseInt(process.env.PRACTICAS_HORAS_MINIMAS, 10) || 600,
+    horasMinimasRevisionInforme: parseInt(process.env.PRACTICAS_HORAS_MINIMAS, 10) || 300,
   },
   tesis: {
     similitudMaximaParaJurado: parseFloat(process.env.TESIS_SIMILITUD_MAX_JURADO || '') || 25,

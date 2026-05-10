@@ -12,7 +12,19 @@ import { CreateTesisDto } from './dto/create-tesis.dto';
 import { UpdateTesisDto } from './dto/update-tesis.dto';
 import { AsignarJuradoDto } from './dto/asignar-jurado.dto';
 import { CreateAvanceDto } from './dto/create-avance.dto';
-import { EstadoTesis } from '@prisma/client';
+import { SubirDocumentoTesisDto } from './dto/subir-documento-tesis.dto';
+import {
+  CrearPagoTesisDto,
+  CargarComprobantePagoDto,
+  VerificarPagoTesisDto,
+} from './dto/pago-tesis.dto';
+import { RevisionJuradoObservacionesDto } from './dto/revision-jurado.dto';
+import {
+  EstadoTesis,
+  EstadoRevisionJurado,
+  EstadoPago,
+  TipoDocumentoTesis,
+} from '@prisma/client';
 import { PppGateService } from '../ppp/ppp-gate.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 
@@ -160,16 +172,22 @@ export class TesisService {
                   select: {
                     nombres: true,
                     apellidos: true,
+                    email: true,
                   },
                 },
               },
             },
+            revisiones: { orderBy: { id: 'desc' } },
           },
         },
         avances: {
           orderBy: { fecha_entrega: 'desc' },
         },
         acta: true,
+        documentos: {
+          orderBy: [{ tipo: 'asc' }, { version: 'desc' }, { subido_en: 'desc' }],
+        },
+        pagos: { orderBy: { created_at: 'desc' } },
       },
     });
 
@@ -253,17 +271,12 @@ export class TesisService {
   async updateEstado(id: number, estado: EstadoTesis) {
     const tesis = await this.findOne(id);
 
-    // Validar transiciones de estado
-    const transicionesValidas = {
-      [EstadoTesis.propuesta]: [EstadoTesis.desarrollo],
-      [EstadoTesis.desarrollo]: [EstadoTesis.sustentacion, EstadoTesis.propuesta],
-      [EstadoTesis.sustentacion]: [EstadoTesis.culminado, EstadoTesis.desarrollo],
-      [EstadoTesis.culminado]: [],
-    };
-
-    if (!transicionesValidas[tesis.estado].includes(estado)) {
+    if (
+      tesis.estado === EstadoTesis.culminado &&
+      estado !== EstadoTesis.culminado
+    ) {
       throw new ConflictException(
-        `No se puede cambiar de ${tesis.estado} a ${estado}`,
+        'No se puede revertir una tesis ya culminada.',
       );
     }
 
@@ -307,16 +320,38 @@ export class TesisService {
     }
 
     const jurados = await Promise.all(
-      asignarJuradoDto.map((j) =>
-        this.prisma.juradoTesis.create({
+      asignarJuradoDto.map(async (j) => {
+        const jt = await this.prisma.juradoTesis.create({
           data: {
             tesis_id: id,
             asesor_id: j.asesor_id,
             rol: j.rol,
           },
-        }),
-      ),
+        });
+        await this.prisma.revisionJurado.create({
+          data: {
+            jurado_tesis_id: jt.id,
+            estado: EstadoRevisionJurado.pendiente,
+            version_documento: 1,
+          },
+        });
+        return jt;
+      }),
     );
+
+    const totalJurados = await this.prisma.juradoTesis.count({
+      where: { tesis_id: id },
+    });
+    if (
+      totalJurados >= 3 &&
+      (tesis.estado === EstadoTesis.desarrollo ||
+        tesis.estado === EstadoTesis.propuesta)
+    ) {
+      await this.prisma.tesis.update({
+        where: { id },
+        data: { estado: EstadoTesis.en_revision },
+      });
+    }
 
     const tesisTitulo = tesis.titulo;
     for (const j of asignarJuradoDto) {
@@ -338,6 +373,12 @@ export class TesisService {
   }
 
   async removerJurado(tesisId: number, juradoId: number) {
+    const row = await this.prisma.juradoTesis.findFirst({
+      where: { id: juradoId, tesis_id: tesisId },
+    });
+    if (!row) {
+      throw new NotFoundException('Jurado no encontrado en esta tesis');
+    }
     return this.prisma.juradoTesis.delete({
       where: { id: juradoId },
     });
@@ -352,9 +393,10 @@ export class TesisService {
   }) {
     const tesis = await this.findOne(id);
 
-    // Verificar que la tesis esté en sustentación
-    if (tesis.estado !== 'sustentacion') {
-      throw new ConflictException('La tesis debe estar en fase de sustentación');
+    if (tesis.estado !== EstadoTesis.sustentacion_programada) {
+      throw new ConflictException(
+        'La fecha de sustentación debe estar programada antes de registrar el acta',
+      );
     }
 
     // Verificar que no exista ya un acta
@@ -377,7 +419,7 @@ export class TesisService {
     await this.prisma.tesis.update({
       where: { id },
       data: {
-        estado: 'culminado',
+        estado: EstadoTesis.culminado,
         fecha_sustentacion: new Date(actaData.fecha),
       },
     });
@@ -519,5 +561,411 @@ export class TesisService {
       }, {}),
       tesis_recientes: tesisRecientes,
     };
+  }
+
+  async subirDocumentoTesis(
+    tesisId: number,
+    dto: SubirDocumentoTesisDto,
+    usuarioId: number,
+  ) {
+    const tesis = await this.findOne(tesisId);
+    const estudiante = await this.prisma.estudiante.findUnique({
+      where: { usuario_id: usuarioId },
+    });
+    if (!estudiante || estudiante.id !== tesis.estudiante_id) {
+      throw new ForbiddenException('Solo el tesista puede adjuntar estos documentos.');
+    }
+
+    let version = dto.version;
+    if (version == null) {
+      const agg = await this.prisma.documentoTesis.aggregate({
+        where: { tesis_id: tesisId, tipo: dto.tipo },
+        _max: { version: true },
+      });
+      version = (agg._max.version ?? 0) + 1;
+    }
+
+    const doc = await this.prisma.documentoTesis.create({
+      data: {
+        tesis_id: tesisId,
+        tipo: dto.tipo,
+        archivo_url: dto.archivo_url,
+        nombre_original: dto.nombre_original,
+        version,
+        subido_por: usuarioId,
+      },
+    });
+
+    const dataTesis: Record<string, unknown> = {};
+
+    if (
+      dto.tipo === TipoDocumentoTesis.tesis_final &&
+      !tesis.fecha_recepcion_documentos
+    ) {
+      dataTesis.fecha_recepcion_documentos = new Date();
+    }
+
+    if (dto.tipo === TipoDocumentoTesis.version_corregida) {
+      dataTesis.estado = EstadoTesis.observaciones_levantadas;
+      await this.prisma.revisionJurado.updateMany({
+        where: { jurado_tesis: { tesis_id: tesisId } },
+        data: {
+          conforme: false,
+          estado: EstadoRevisionJurado.pendiente,
+          revisado_en: null,
+          version_documento: { increment: 1 },
+        },
+      });
+    }
+
+    if (Object.keys(dataTesis).length > 0) {
+      await this.prisma.tesis.update({
+        where: { id: tesisId },
+        data: dataTesis as { estado?: EstadoTesis; fecha_recepcion_documentos?: Date },
+      });
+    }
+
+    return doc;
+  }
+
+  async crearPagoTesis(tesisId: number, dto: CrearPagoTesisDto) {
+    await this.findOne(tesisId);
+
+    return this.prisma.pagoTesis.create({
+      data: {
+        tesis_id: tesisId,
+        tipo: dto.tipo,
+        monto: dto.monto,
+        estado: EstadoPago.pendiente,
+        observaciones: dto.observaciones,
+      },
+    });
+  }
+
+  async cargarComprobantePagoTesis(
+    tesisId: number,
+    pagoId: number,
+    dto: CargarComprobantePagoDto,
+    usuarioId: number,
+  ) {
+    const tesis = await this.findOne(tesisId);
+    const estudiante = await this.prisma.estudiante.findUnique({
+      where: { usuario_id: usuarioId },
+    });
+    if (!estudiante || estudiante.id !== tesis.estudiante_id) {
+      throw new ForbiddenException('Solo el tesista puede cargar comprobantes.');
+    }
+
+    const pago = await this.prisma.pagoTesis.findFirst({
+      where: { id: pagoId, tesis_id: tesisId },
+    });
+    if (!pago) {
+      throw new NotFoundException('Pago no encontrado');
+    }
+
+    return this.prisma.pagoTesis.update({
+      where: { id: pagoId },
+      data: {
+        comprobante_url: dto.comprobante_url,
+        comprobante_subido_en: new Date(),
+        estado: EstadoPago.comprobante_cargado,
+        observaciones: dto.observaciones ?? pago.observaciones,
+      },
+    });
+  }
+
+  async verificarPagoTesis(
+    tesisId: number,
+    pagoId: number,
+    dto: VerificarPagoTesisDto,
+    verificadorUsuarioId: number,
+  ) {
+    await this.findOne(tesisId);
+
+    const pago = await this.prisma.pagoTesis.findFirst({
+      where: { id: pagoId, tesis_id: tesisId },
+    });
+    if (!pago) {
+      throw new NotFoundException('Pago no encontrado');
+    }
+
+    const nuevoEstado = dto.estado;
+    if (
+      nuevoEstado !== EstadoPago.verificado &&
+      nuevoEstado !== EstadoPago.rechazado
+    ) {
+      throw new ConflictException(
+        'La verificación administrativa solo puede marcar verificado o rechazado.',
+      );
+    }
+
+    return this.prisma.pagoTesis.update({
+      where: { id: pagoId },
+      data: {
+        estado: nuevoEstado,
+        verificado_por:
+          nuevoEstado === EstadoPago.verificado ? verificadorUsuarioId : null,
+        verificado_en:
+          nuevoEstado === EstadoPago.verificado ? new Date() : null,
+        observaciones: dto.observaciones ?? pago.observaciones,
+      },
+    });
+  }
+
+  async juradoRegistrarObservaciones(
+    tesisId: number,
+    juradoTesisId: number,
+    usuarioId: number,
+    dto: RevisionJuradoObservacionesDto,
+  ) {
+    const tesis = await this.findOne(tesisId);
+
+    const nJurados = await this.prisma.juradoTesis.count({
+      where: { tesis_id: tesisId },
+    });
+    if (nJurados < 3) {
+      throw new HttpException(
+        {
+          message: 'Deben designarse 3 jurados antes de registrar observaciones.',
+          code: 'JURADO_INCOMPLETO',
+        },
+        HttpStatus.PRECONDITION_FAILED,
+      );
+    }
+
+    const jt = await this.prisma.juradoTesis.findFirst({
+      where: { id: juradoTesisId, tesis_id: tesisId },
+      include: { asesor: true },
+    });
+    if (!jt) {
+      throw new NotFoundException('Asignación de jurado no encontrada');
+    }
+    if (jt.asesor.usuario_id !== usuarioId) {
+      throw new ForbiddenException('Solo el jurado asignado puede registrar observaciones.');
+    }
+
+    const revision = await this.prisma.revisionJurado.findFirst({
+      where: { jurado_tesis_id: juradoTesisId },
+      orderBy: { id: 'desc' },
+    });
+    if (!revision) {
+      throw new ConflictException('No existe ciclo de revisión para este jurado.');
+    }
+
+    await this.prisma.revisionJurado.update({
+      where: { id: revision.id },
+      data: {
+        estado: EstadoRevisionJurado.observaciones,
+        observaciones: dto.observaciones,
+        archivo_correciones_url: dto.archivo_correciones_url ?? null,
+        conforme: false,
+        revisado_en: new Date(),
+      },
+    });
+
+    await this.prisma.tesis.update({
+      where: { id: tesisId },
+      data: { estado: EstadoTesis.observaciones_emitidas },
+    });
+
+    const estudiante = await this.prisma.estudiante.findUnique({
+      where: { id: tesis.estudiante_id },
+      select: { usuario_id: true },
+    });
+    if (estudiante) {
+      await this.notificaciones.crearParaUsuario(
+        estudiante.usuario_id,
+        'Observaciones del jurado',
+        'Tienes observaciones de los jurados sobre tu tesis.',
+        { tesis_id: tesisId, jurado_tesis_id: juradoTesisId },
+      );
+    }
+
+    return this.prisma.revisionJurado.findUnique({
+      where: { id: revision.id },
+    });
+  }
+
+  async juradoMarcarConforme(
+    tesisId: number,
+    juradoTesisId: number,
+    usuarioId: number,
+  ) {
+    await this.findOne(tesisId);
+
+    const nJurados = await this.prisma.juradoTesis.count({
+      where: { tesis_id: tesisId },
+    });
+    if (nJurados < 3) {
+      throw new HttpException(
+        {
+          message: 'Deben designarse 3 jurados antes de registrar conformidad.',
+          code: 'JURADO_INCOMPLETO',
+        },
+        HttpStatus.PRECONDITION_FAILED,
+      );
+    }
+
+    const jt = await this.prisma.juradoTesis.findFirst({
+      where: { id: juradoTesisId, tesis_id: tesisId },
+      include: { asesor: true },
+    });
+    if (!jt) {
+      throw new NotFoundException('Asignación de jurado no encontrada');
+    }
+    if (jt.asesor.usuario_id !== usuarioId) {
+      throw new ForbiddenException('Solo el jurado asignado puede marcar conformidad.');
+    }
+
+    const revision = await this.prisma.revisionJurado.findFirst({
+      where: { jurado_tesis_id: juradoTesisId },
+      orderBy: { id: 'desc' },
+    });
+    if (!revision) {
+      throw new ConflictException('No existe ciclo de revisión para este jurado.');
+    }
+
+    await this.prisma.revisionJurado.update({
+      where: { id: revision.id },
+      data: {
+        estado: EstadoRevisionJurado.conforme,
+        conforme: true,
+        revisado_en: new Date(),
+      },
+    });
+
+    const jurados = await this.prisma.juradoTesis.findMany({
+      where: { tesis_id: tesisId },
+      include: {
+        revisiones: { orderBy: { id: 'desc' }, take: 1 },
+      },
+    });
+
+    const todosConformes =
+      jurados.length >= 3 &&
+      jurados.every(
+        (j) =>
+          j.revisiones[0]?.conforme === true &&
+          j.revisiones[0]?.estado === EstadoRevisionJurado.conforme,
+      );
+
+    if (todosConformes) {
+      await this.prisma.tesis.update({
+        where: { id: tesisId },
+        data: { estado: EstadoTesis.aprobado_jurado },
+      });
+    }
+
+    return this.prisma.revisionJurado.findUnique({
+      where: { id: revision.id },
+    });
+  }
+
+  async construirChecklistCierre(tesisId: number) {
+    const tesis = await this.findOne(tesisId);
+
+    const practicasOk = await this.pppGate.practicasAprobadas(tesis.estudiante_id);
+
+    const tieneDocFinal = await this.prisma.documentoTesis.findFirst({
+      where: {
+        tesis_id: tesisId,
+        tipo: TipoDocumentoTesis.tesis_final,
+      },
+    });
+
+    const pagos = await this.prisma.pagoTesis.findMany({
+      where: { tesis_id: tesisId },
+    });
+
+    const pagosOk =
+      pagos.length > 0 &&
+      pagos.every((p) => p.estado === EstadoPago.verificado);
+
+    const juradoOk = tesis.estado === EstadoTesis.aprobado_jurado;
+
+    const motivos: string[] = [];
+    if (!practicasOk) motivos.push('Prácticas no constan como aprobadas.');
+    if (!juradoOk) motivos.push('El jurado no ha cerrado con conformidad.');
+    if (!tieneDocFinal) motivos.push('Falta registrar la tesis final.');
+    if (!pagosOk) motivos.push('Existen pagos pendientes de verificación.');
+    if ((await this.prisma.juradoTesis.count({ where: { tesis_id: tesisId } })) < 3) {
+      motivos.push('Deben asignarse 3 jurados.');
+    }
+
+    return {
+      completo: motivos.length === 0,
+      motivos,
+      detalle: {
+        practicas_ok: practicasOk,
+        jurado_ok: juradoOk,
+        documento_final_ok: !!tieneDocFinal,
+        pagos_ok: pagosOk,
+      },
+    };
+  }
+
+  async validarExpedito(tesisId: number) {
+    const checklist = await this.construirChecklistCierre(tesisId);
+    if (!checklist.completo) {
+      throw new HttpException(
+        {
+          message: 'No se cumplen los requisitos para declarar la tesis expedita.',
+          motivos: checklist.motivos,
+          detalle: checklist.detalle,
+          code: 'TESIS_CIERRE_INCOMPLETO',
+        },
+        HttpStatus.PRECONDITION_FAILED,
+      );
+    }
+
+    return this.prisma.tesis.update({
+      where: { id: tesisId },
+      data: { estado: EstadoTesis.expedito },
+    });
+  }
+
+  async gateProgramarSustentacion(tesisId: number) {
+    const tesis = await this.findOne(tesisId);
+    const practicasOk = await this.pppGate.practicasAprobadas(tesis.estudiante_id);
+
+    const motivos: string[] = [];
+    if (!practicasOk) {
+      motivos.push('Las prácticas deben estar en estado APROBADO.');
+    }
+    if (tesis.estado !== EstadoTesis.expedito) {
+      motivos.push(
+        'La validación final de documentos y pagos debe estar completa (estado expedito).',
+      );
+    }
+
+    return {
+      permitido: motivos.length === 0,
+      motivos,
+      practicas_aprobadas: practicasOk,
+      estado_tesis: tesis.estado,
+    };
+  }
+
+  async programarSustentacion(tesisId: number, fechaIso: string) {
+    const gate = await this.gateProgramarSustentacion(tesisId);
+    if (!gate.permitido) {
+      throw new HttpException(
+        {
+          message: 'No se puede programar la sustentación.',
+          motivos: gate.motivos,
+          code: 'SUSTENTACION_GATE',
+        },
+        HttpStatus.PRECONDITION_FAILED,
+      );
+    }
+
+    const fecha = new Date(fechaIso);
+    return this.prisma.tesis.update({
+      where: { id: tesisId },
+      data: {
+        fecha_sustentacion: fecha,
+        estado: EstadoTesis.sustentacion_programada,
+      },
+    });
   }
 }

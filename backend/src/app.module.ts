@@ -7,6 +7,7 @@ import { AsesoresModule } from './asesores/asesores.module';
 import { EmpresasModule } from './empresas/empresas.module';
 import { OfertasModule } from './ofertas/ofertas.module';
 import { SeguimientoModule } from './seguimiento/seguimiento.module';
+import { PracticasModule } from './practicas/practicas.module';
 import { TesisModule } from './tesis/tesis.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportesModule } from './reportes/reportes.module';
@@ -28,6 +29,7 @@ import configuration from './config/configuration';
     EmpresasModule,
     OfertasModule,
     SeguimientoModule,
+    PracticasModule,
     TesisModule,
     DashboardModule,
     ReportesModule,

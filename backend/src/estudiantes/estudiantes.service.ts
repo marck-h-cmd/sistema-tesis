@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEstudianteDto } from './dto/create-estudiante.dto';
 import { UpdateEstudianteDto } from './dto/update-estudiante.dto';
 import { PppGateService } from '../ppp/ppp-gate.service';
+import { EstadoPractica, EstadoTesis } from '@prisma/client';
 
 @Injectable()
 export class EstudiantesService {
@@ -227,7 +228,7 @@ export class EstudiantesService {
             },
           },
         },
-        seguimiento: true,
+        practica: true,
       },
       orderBy: { fecha_postulacion: 'desc' },
     });
@@ -283,28 +284,51 @@ export class EstudiantesService {
         estudiante_id: estudianteId,
         estado: { in: ['postulado', 'aceptado', 'en_curso'] },
       },
-      include: { seguimiento: true, oferta: { include: { empresa: true } } },
+      include: { practica: true, oferta: { include: { empresa: true } } },
       orderBy: { fecha_postulacion: 'desc' },
     });
 
     const umbralRevision =
       this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
-      600;
+      300;
+
+    const practicaRow = postulacionActiva?.practica;
 
     const horasMin =
-      postulacionActiva?.seguimiento?.horas_cumplidas != null
+      practicaRow != null
         ? {
-            cumplidas: postulacionActiva.seguimiento.horas_cumplidas,
-            totales: postulacionActiva.seguimiento.horas_totales,
+            cumplidas: practicaRow.horas_cumplidas,
+            totales: practicaRow.horas_totales,
             umbral_revision_informe: umbralRevision,
             puede_solicitar_revision_informe_final:
-              postulacionActiva.seguimiento.horas_cumplidas >= umbralRevision,
+              practicaRow.horas_cumplidas >= umbralRevision &&
+              (practicaRow.estado === EstadoPractica.en_ejecucion ||
+                practicaRow.estado === EstadoPractica.plan_validado),
           }
         : null;
+
+    const tesisActiva = await this.prisma.tesis.findFirst({
+      where: {
+        estudiante_id: estudianteId,
+        estado: { not: EstadoTesis.culminado },
+      },
+      orderBy: { updated_at: 'desc' },
+      select: { id: true, estado: true },
+    });
+
+    const workflowEtapa = this.resolverWorkflowEtapa({
+      practicaEstado: practicaRow?.estado ?? null,
+      tienePracticaAprobada: habilitacion.tiene_practica_aprobada,
+      tesisEstado: tesisActiva?.estado ?? null,
+    });
 
     return {
       ...habilitacion,
       modulo_tesis_desbloqueado: habilitacion.puede_registrar_tesis,
+      /** Alias explícito para el condicional de sustentación en frontend */
+      practicas_status: habilitacion.practicas_status,
+      practicas_aprobadas: habilitacion.tiene_practica_aprobada,
+      workflow_etapa: workflowEtapa,
       postulacion_practica_activa: postulacionActiva
         ? {
             id: postulacionActiva.id,
@@ -315,17 +339,79 @@ export class EstudiantesService {
               postulacionActiva.estado_convenio_especifico,
           }
         : null,
-      seguimiento_practica: postulacionActiva?.seguimiento
+      practica_id: practicaRow?.id ?? null,
+      seguimiento_practica: practicaRow
         ? {
-            id: postulacionActiva.seguimiento.id,
-            horas_cumplidas: postulacionActiva.seguimiento.horas_cumplidas,
-            horas_totales: postulacionActiva.seguimiento.horas_totales,
-            solicitud_revision_informe_final:
-              postulacionActiva.seguimiento.solicitud_revision_informe_final,
-            evaluacion: postulacionActiva.seguimiento.evaluacion,
+            id: practicaRow.id,
+            estado_practica: practicaRow.estado,
+            horas_cumplidas: practicaRow.horas_cumplidas,
+            horas_totales: practicaRow.horas_totales,
+            plan_validado: practicaRow.plan_validado,
+            informe_aprobado: practicaRow.informe_aprobado,
           }
         : null,
       horas_resumen: horasMin,
+      tesis_activa: tesisActiva,
     };
+  }
+
+  private resolverWorkflowEtapa(input: {
+    practicaEstado: EstadoPractica | null;
+    tienePracticaAprobada: boolean;
+    tesisEstado: EstadoTesis | null;
+  }):
+    | 'practicante'
+    | 'egresado'
+    | 'tesista'
+    | 'en_revision'
+    | 'expedito'
+    | 'sustentacion' {
+    const { practicaEstado, tienePracticaAprobada, tesisEstado } = input;
+
+    if (!tienePracticaAprobada) {
+      if (
+        practicaEstado === EstadoPractica.plan_pendiente ||
+        practicaEstado === EstadoPractica.plan_validado
+      ) {
+        return 'practicante';
+      }
+      if (
+        practicaEstado === EstadoPractica.informe_pendiente ||
+        practicaEstado === EstadoPractica.en_ejecucion
+      ) {
+        return 'egresado';
+      }
+      return 'practicante';
+    }
+
+    if (
+      !tesisEstado ||
+      tesisEstado === EstadoTesis.propuesta ||
+      tesisEstado === EstadoTesis.desarrollo
+    ) {
+      return 'tesista';
+    }
+
+    if (
+      tesisEstado === EstadoTesis.en_revision ||
+      tesisEstado === EstadoTesis.observaciones_emitidas ||
+      tesisEstado === EstadoTesis.observaciones_levantadas ||
+      tesisEstado === EstadoTesis.aprobado_jurado
+    ) {
+      return 'en_revision';
+    }
+
+    if (tesisEstado === EstadoTesis.expedito) {
+      return 'expedito';
+    }
+
+    if (
+      tesisEstado === EstadoTesis.sustentacion_programada ||
+      tesisEstado === EstadoTesis.sustentado
+    ) {
+      return 'sustentacion';
+    }
+
+    return 'tesista';
   }
 }

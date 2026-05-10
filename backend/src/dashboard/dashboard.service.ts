@@ -180,7 +180,7 @@ async getEstadisticasPracticas() {
     const postulacionesExitosas = await this.prisma.postulacion.count({
       where: {
         estado: 'finalizado',
-        seguimiento: { evaluacion: 'aprobado' },
+        practica: { estado: 'aprobado' },
       },
     });
 
@@ -303,7 +303,7 @@ async getEstadisticasPracticas() {
         const ultimoAvance = t.avances[0]?.fecha_entrega;
         const referencia = ultimoAvance
           ? new Date(ultimoAvance)
-          : new Date(t.updated_at);
+          : new Date(t.created_at);
         return {
           tesis_id: t.id,
           titulo: t.titulo,
