@@ -286,22 +286,38 @@ function PostulacionCard({ postulacion }: { postulacion: any }) {
           </div>
         </div>
 
-        {postulacion.seguimiento && (
-          <div className="mt-4 pt-4 border-t">
+        {postulacion.practica && (
+          <div className="mt-4 pt-4 border-t space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Progreso:</span>
+              <span className="text-muted-foreground">Práctica:</span>
+              <span className="font-medium capitalize">{postulacion.practica.estado?.replace(/_/g, ' ')}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Horas:</span>
               <span className="font-medium">
-                {postulacion.seguimiento.horas_cumplidas} / {postulacion.seguimiento.horas_totales} horas
+                {postulacion.practica.horas_cumplidas} / {postulacion.practica.horas_totales}
               </span>
             </div>
             <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-primary rounded-full h-2 transition-all"
                 style={{
-                  width: `${(postulacion.seguimiento.horas_cumplidas / postulacion.seguimiento.horas_totales) * 100}%`
+                  width: `${Math.min(
+                    (postulacion.practica.horas_cumplidas / postulacion.practica.horas_totales) * 100,
+                    100,
+                  )}%`,
                 }}
               />
             </div>
+            {(postulacion.estado === 'aceptado' ||
+              postulacion.estado === 'en_curso' ||
+              postulacion.estado === 'finalizado') && (
+              <Link href={`/practicas/expediente/${postulacion.id}`}>
+                <Button variant="secondary" className="w-full mt-2">
+                  Expediente de prácticas
+                </Button>
+              </Link>
+            )}
           </div>
         )}
 

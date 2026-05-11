@@ -12,6 +12,7 @@ import { TesisModule } from './tesis/tesis.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportesModule } from './reportes/reportes.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { PrismaModule } from 'prisma/prisma.module';
 import configuration from './config/configuration';
 
@@ -34,6 +35,7 @@ import configuration from './config/configuration';
     DashboardModule,
     ReportesModule,
     NotificacionesModule,
+    UploadsModule,
   ],
 })
 export class AppModule {}

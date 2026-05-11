@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTesisDto } from './dto/create-tesis.dto';
 import { UpdateTesisDto } from './dto/update-tesis.dto';
+import { AdminUpdateTesisDto } from './dto/admin-update-tesis.dto';
 import { AsignarJuradoDto } from './dto/asignar-jurado.dto';
 import { CreateAvanceDto } from './dto/create-avance.dto';
 import { SubirDocumentoTesisDto } from './dto/subir-documento-tesis.dto';
@@ -18,6 +19,7 @@ import {
   CargarComprobantePagoDto,
   VerificarPagoTesisDto,
 } from './dto/pago-tesis.dto';
+import { ValidarDocumentoTesisDto } from './dto/validar-documento-tesis.dto';
 import { RevisionJuradoObservacionesDto } from './dto/revision-jurado.dto';
 import {
   EstadoTesis,
@@ -170,6 +172,7 @@ export class TesisService {
               include: {
                 usuario: {
                   select: {
+                    id: true,
                     nombres: true,
                     apellidos: true,
                     email: true,
@@ -266,6 +269,47 @@ export class TesisService {
       where: { id },
       data,
     });
+  }
+
+  async updateAdmin(id: number, dto: AdminUpdateTesisDto) {
+    await this.findOne(id);
+    const data: Record<string, unknown> = {};
+
+    if (dto.titulo !== undefined) data.titulo = dto.titulo;
+    if (dto.resumen !== undefined) data.resumen = dto.resumen;
+    if (dto.estudiante_id !== undefined) data.estudiante_id = dto.estudiante_id;
+    if (dto.asesor_principal_id !== undefined) {
+      data.asesor_principal_id = dto.asesor_principal_id;
+    }
+    if (dto.estado !== undefined) data.estado = dto.estado;
+    if (dto.recibo_turnitin_url !== undefined) {
+      data.recibo_turnitin_url = dto.recibo_turnitin_url;
+    }
+    if (dto.similitud_turnitin !== undefined) {
+      data.similitud_turnitin = dto.similitud_turnitin;
+    }
+
+    const dateField = (key: keyof AdminUpdateTesisDto, val: string | null | undefined) => {
+      if (val === undefined) return;
+      data[key] = val === null || val === '' ? null : new Date(val);
+    };
+
+    dateField('fecha_inicio', dto.fecha_inicio as string | null | undefined);
+    dateField(
+      'fecha_recepcion_documentos',
+      dto.fecha_recepcion_documentos as string | null | undefined,
+    );
+    dateField(
+      'fecha_limite_sustentacion',
+      dto.fecha_limite_sustentacion as string | null | undefined,
+    );
+    dateField('fecha_sustentacion', dto.fecha_sustentacion as string | null | undefined);
+
+    await this.prisma.tesis.update({
+      where: { id },
+      data: data as any,
+    });
+    return this.findOne(id);
   }
 
   async updateEstado(id: number, estado: EstadoTesis) {
@@ -638,6 +682,115 @@ export class TesisService {
         monto: dto.monto,
         estado: EstadoPago.pendiente,
         observaciones: dto.observaciones,
+      },
+    });
+  }
+
+  /** Solicitud de pago por el tesista (mismo efecto que obligación inicial: pendiente de comprobante). */
+  async solicitudPagoTesisPorEstudiante(
+    tesisId: number,
+    dto: CrearPagoTesisDto,
+    usuarioId: number,
+  ) {
+    const tesis = await this.findOne(tesisId);
+    const estudiante = await this.prisma.estudiante.findUnique({
+      where: { usuario_id: usuarioId },
+    });
+    if (!estudiante || estudiante.id !== tesis.estudiante_id) {
+      throw new ForbiddenException('Solo el tesista puede registrar solicitudes de pago.');
+    }
+    const duplicado = await this.prisma.pagoTesis.findFirst({
+      where: {
+        tesis_id: tesisId,
+        tipo: dto.tipo,
+        estado: EstadoPago.pendiente,
+      },
+    });
+    if (duplicado) {
+      throw new ConflictException(
+        'Ya existe una solicitud pendiente para ese concepto. Adjunte el comprobante o espere revisión.',
+      );
+    }
+
+    const obs = dto.observaciones?.trim()
+      ? `[Solicitud estudiante] ${dto.observaciones.trim()}`
+      : '[Solicitud estudiante]';
+
+    return this.prisma.pagoTesis.create({
+      data: {
+        tesis_id: tesisId,
+        tipo: dto.tipo,
+        monto: dto.monto,
+        estado: EstadoPago.pendiente,
+        observaciones: obs,
+      },
+    });
+  }
+
+  /** Pagos pendientes/atención y documentos de tesis sin validar administrativamente. */
+  async colaSecretariaPagosDocumentos() {
+    const estudianteUsuarioSelect = {
+      select: {
+        nombres: true,
+        apellidos: true,
+        email: true,
+      },
+    };
+    const tesisSelectBase = {
+      select: {
+        id: true,
+        titulo: true,
+        estudiante: {
+          select: {
+            id: true,
+            usuario: estudianteUsuarioSelect,
+          },
+        },
+      },
+    };
+
+    const [pagos_atencion, documentos_sin_validar] = await Promise.all([
+      this.prisma.pagoTesis.findMany({
+        where: {
+          estado: {
+            in: [EstadoPago.pendiente, EstadoPago.comprobante_cargado],
+          },
+        },
+        include: { tesis: tesisSelectBase },
+        orderBy: { created_at: 'desc' },
+        take: 200,
+      }),
+      this.prisma.documentoTesis.findMany({
+        where: { validado: false },
+        include: { tesis: tesisSelectBase },
+        orderBy: { subido_en: 'desc' },
+        take: 200,
+      }),
+    ]);
+
+    return { pagos_atencion, documentos_sin_validar };
+  }
+
+  async validarDocumentoTesisAdministrativo(
+    tesisId: number,
+    documentoId: number,
+    validadorUsuarioId: number,
+    dto: ValidarDocumentoTesisDto,
+  ) {
+    const doc = await this.prisma.documentoTesis.findFirst({
+      where: { id: documentoId, tesis_id: tesisId },
+    });
+    if (!doc) {
+      throw new NotFoundException('Documento no encontrado');
+    }
+
+    return this.prisma.documentoTesis.update({
+      where: { id: documentoId },
+      data: {
+        validado: dto.validado,
+        validado_por: dto.validado ? validadorUsuarioId : null,
+        validado_en: dto.validado ? new Date() : null,
+        observaciones: dto.observaciones ?? doc.observaciones ?? undefined,
       },
     });
   }

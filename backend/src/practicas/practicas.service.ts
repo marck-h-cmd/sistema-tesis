@@ -12,10 +12,13 @@ import { CreateReporteMensualDto } from '../seguimiento/dto/create-reporte-mensu
 import {
   EstadoPostulacion,
   EstadoPractica,
+  RolNombre,
   TipoDocumentoPractica,
 } from '@prisma/client';
 import { ValidarPlanDto } from './dto/validar-plan.dto';
 import { AprobarInformeDto } from './dto/aprobar-informe.dto';
+import { UpdatePracticaAdminDto } from './dto/update-practica-admin.dto';
+import { ValidarDocumentoPracticaDto } from './dto/validar-documento-practica.dto';
 
 const practicaFullInclude = {
   estudiante: {
@@ -64,6 +67,7 @@ const practicaFullInclude = {
     include: {
       usuario: {
         select: {
+          id: true,
           nombres: true,
           apellidos: true,
         },
@@ -324,16 +328,24 @@ export class PracticasService {
         horas_reportadas: dto.horas_reportadas,
         archivo_url: dto.archivo_url,
         observaciones: dto.observaciones,
+        validado: false,
+        validado_por: null,
+        validado_en: null,
+        observaciones_asesor: null,
       },
       update: {
         horas_reportadas: dto.horas_reportadas,
         archivo_url: dto.archivo_url,
         observaciones: dto.observaciones,
+        validado: false,
+        validado_por: null,
+        validado_en: null,
+        observaciones_asesor: null,
       },
     });
 
     const agg = await this.prisma.reporteMensualPractica.aggregate({
-      where: { practica_id: practicaId },
+      where: { practica_id: practicaId, validado: true },
       _sum: { horas_reportadas: true },
     });
     const totalReportado = agg._sum.horas_reportadas ?? 0;
@@ -344,6 +356,64 @@ export class PracticasService {
     });
 
     return row;
+  }
+
+  async validarReporteMensual(
+    practicaId: number,
+    reporteId: number,
+    usuarioId: number,
+    payload: { validado: boolean; observaciones?: string },
+    userRoles?: string[],
+  ) {
+    const practica = await this.findOne(practicaId);
+
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { usuario_id: usuarioId },
+    });
+    const esAsesorAsignado =
+      asesor != null && practica.asesor_id != null && asesor.id === practica.asesor_id;
+
+    const roles = userRoles ?? [];
+    const esAdministrativo =
+      roles.includes(RolNombre.admin) ||
+      roles.includes(RolNombre.secretaria) ||
+      roles.includes(RolNombre.coordinador);
+
+    if (!esAsesorAsignado && !esAdministrativo) {
+      throw new ForbiddenException(
+        'Solo el asesor asignado o personal administrativo puede validar reportes mensuales.',
+      );
+    }
+
+    const reporte = await this.prisma.reporteMensualPractica.findFirst({
+      where: { id: reporteId, practica_id: practicaId },
+    });
+    if (!reporte) {
+      throw new NotFoundException('Reporte mensual no encontrado');
+    }
+
+    await this.prisma.reporteMensualPractica.update({
+      where: { id: reporteId },
+      data: {
+        validado: payload.validado,
+        validado_por: payload.validado ? usuarioId : null,
+        validado_en: payload.validado ? new Date() : null,
+        observaciones_asesor: payload.observaciones ?? null,
+      },
+    });
+
+    const agg = await this.prisma.reporteMensualPractica.aggregate({
+      where: { practica_id: practicaId, validado: true },
+      _sum: { horas_reportadas: true },
+    });
+    const totalReportado = agg._sum.horas_reportadas ?? 0;
+
+    await this.prisma.practica.update({
+      where: { id: practicaId },
+      data: { horas_cumplidas: totalReportado },
+    });
+
+    return this.prisma.reporteMensualPractica.findUnique({ where: { id: reporteId } });
   }
 
   async listarReportesMensuales(practicaId: number) {
@@ -725,5 +795,98 @@ export class PracticasService {
       },
     });
     return !!row;
+  }
+
+  /** Cola de secretaría: planes con PDF pendientes de OK, documentos y reportes mensuales sin validar. */
+  async colaSecretaria() {
+    const [planes_pendientes, documentos_sin_validar, reportes_mensuales_sin_validar] =
+      await Promise.all([
+      this.prisma.practica.findMany({
+        where: {
+          estado: EstadoPractica.plan_pendiente,
+          plan_practicas_url: { not: null },
+        },
+        include: practicaFullInclude,
+        orderBy: { plan_practicas_subido_en: 'desc' },
+      }),
+      this.prisma.documentoPractica.findMany({
+        where: { validado: false },
+        include: {
+          practica: {
+            include: practicaFullInclude,
+          },
+        },
+        orderBy: { subido_en: 'desc' },
+        take: 200,
+      }),
+      this.prisma.reporteMensualPractica.findMany({
+        where: { validado: false },
+        include: {
+          practica: {
+            include: practicaFullInclude,
+          },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 200,
+      }),
+    ]);
+    return {
+      planes_pendientes,
+      documentos_sin_validar,
+      reportes_mensuales_sin_validar,
+    };
+  }
+
+  async updateAdmin(id: number, dto: UpdatePracticaAdminDto) {
+    await this.findOne(id);
+    const data: Record<string, unknown> = {};
+    if (dto.horas_totales !== undefined) {
+      data.horas_totales = dto.horas_totales;
+    }
+    if (dto.horas_cumplidas !== undefined) {
+      data.horas_cumplidas = dto.horas_cumplidas;
+    }
+    if (dto.fecha_inicio !== undefined) {
+      data.fecha_inicio = dto.fecha_inicio ? new Date(dto.fecha_inicio) : null;
+    }
+    if (dto.fecha_fin_estimada !== undefined) {
+      data.fecha_fin_estimada = dto.fecha_fin_estimada
+        ? new Date(dto.fecha_fin_estimada)
+        : null;
+    }
+    if (dto.estado !== undefined) {
+      data.estado = dto.estado;
+    }
+    if (dto.asesor_id !== undefined) {
+      data.asesor_id = dto.asesor_id;
+    }
+    return this.prisma.practica.update({
+      where: { id },
+      data,
+      include: practicaFullInclude,
+    });
+  }
+
+  async validarDocumentoPractica(
+    practicaId: number,
+    documentoId: number,
+    validadorUsuarioId: number,
+    dto: ValidarDocumentoPracticaDto,
+  ) {
+    const doc = await this.prisma.documentoPractica.findFirst({
+      where: { id: documentoId, practica_id: practicaId },
+    });
+    if (!doc) {
+      throw new NotFoundException('Documento no encontrado');
+    }
+    return this.prisma.documentoPractica.update({
+      where: { id: documentoId },
+      data: {
+        validado: dto.validado,
+        validado_por: dto.validado ? validadorUsuarioId : null,
+        validado_en: dto.validado ? new Date() : null,
+        observaciones: dto.observaciones ?? undefined,
+      },
+    });
   }
 }

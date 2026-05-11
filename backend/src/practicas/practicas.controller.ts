@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Put,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -10,6 +11,8 @@ import { PracticasService } from './practicas.service';
 import { SubirArchivoPracticaDto } from './dto/subir-archivo-practica.dto';
 import { ValidarPlanDto } from './dto/validar-plan.dto';
 import { AprobarInformeDto } from './dto/aprobar-informe.dto';
+import { UpdatePracticaAdminDto } from './dto/update-practica-admin.dto';
+import { ValidarDocumentoPracticaDto } from './dto/validar-documento-practica.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -20,6 +23,40 @@ import { RolNombre } from '@prisma/client';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PracticasController {
   constructor(private readonly practicas: PracticasService) {}
+
+  @Get('secretaria/cola')
+  @Roles(RolNombre.secretaria, RolNombre.admin, RolNombre.asesor)
+  async colaSecretaria() {
+    const data = await this.practicas.colaSecretaria();
+    return { data };
+  }
+
+  @Patch(':id/admin')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async updateAdmin(
+    @Param('id') id: string,
+    @Body() dto: UpdatePracticaAdminDto,
+  ) {
+    const row = await this.practicas.updateAdmin(+id, dto);
+    return { data: row, message: 'Práctica actualizada' };
+  }
+
+  @Put(':id/documentos/:documentoId/validar')
+  @Roles(RolNombre.secretaria, RolNombre.admin)
+  async validarDocumento(
+    @Param('id') id: string,
+    @Param('documentoId') documentoId: string,
+    @Body() dto: ValidarDocumentoPracticaDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const row = await this.practicas.validarDocumentoPractica(
+      +id,
+      +documentoId,
+      user.id,
+      dto,
+    );
+    return { data: row, message: 'Documento actualizado' };
+  }
 
   @Get('estudiante/:estudianteId')
   @Roles(

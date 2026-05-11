@@ -90,6 +90,16 @@ export class EstudiantesService {
                 },
               },
             },
+            practica: {
+              select: {
+                id: true,
+                estado: true,
+                horas_cumplidas: true,
+                horas_totales: true,
+                fecha_inicio: true,
+                fecha_fin_estimada: true,
+              },
+            },
           },
           orderBy: { fecha_postulacion: 'desc' },
         },
@@ -161,12 +171,13 @@ export class EstudiantesService {
   }
 
   async update(id: number, updateEstudianteDto: UpdateEstudianteDto) {
-    await this.findOne(id);
+    const estudiante = await this.findOne(id);
+    const { usuario: usuarioPatch, ...estPatch } = updateEstudianteDto;
 
-    if (updateEstudianteDto.codigo_universitario) {
+    if (estPatch.codigo_universitario) {
       const existing = await this.prisma.estudiante.findFirst({
         where: {
-          codigo_universitario: updateEstudianteDto.codigo_universitario,
+          codigo_universitario: estPatch.codigo_universitario,
           id: { not: id },
         },
       });
@@ -176,21 +187,54 @@ export class EstudiantesService {
       }
     }
 
-    return this.prisma.estudiante.update({
-      where: { id },
-      data: updateEstudianteDto,
-      include: {
-        usuario: {
-          select: {
-            id: true,
-            email: true,
-            nombres: true,
-            apellidos: true,
+    if (usuarioPatch && Object.keys(usuarioPatch).length > 0) {
+      if (usuarioPatch.email) {
+        const u = await this.prisma.usuario.findFirst({
+          where: {
+            email: usuarioPatch.email,
+            id: { not: estudiante.usuario_id },
           },
-        },
-        escuela: true,
-      },
-    });
+        });
+        if (u) {
+          throw new ConflictException('El email ya está registrado');
+        }
+      }
+      if (usuarioPatch.dni) {
+        const u = await this.prisma.usuario.findFirst({
+          where: {
+            dni: usuarioPatch.dni,
+            id: { not: estudiante.usuario_id },
+          },
+        });
+        if (u) {
+          throw new ConflictException('El DNI ya está registrado');
+        }
+      }
+      await this.prisma.usuario.update({
+        where: { id: estudiante.usuario_id },
+        data: usuarioPatch,
+      });
+    }
+
+    const estudianteData: {
+      codigo_universitario?: string;
+      escuela_id?: number;
+    } = {};
+    if (estPatch.codigo_universitario !== undefined) {
+      estudianteData.codigo_universitario = estPatch.codigo_universitario;
+    }
+    if (estPatch.escuela_id !== undefined) {
+      estudianteData.escuela_id = estPatch.escuela_id;
+    }
+
+    if (Object.keys(estudianteData).length > 0) {
+      await this.prisma.estudiante.update({
+        where: { id },
+        data: estudianteData,
+      });
+    }
+
+    return this.findOne(id);
   }
 
   async remove(id: number) {

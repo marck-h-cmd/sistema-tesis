@@ -34,7 +34,7 @@ export class OfertasController {
   ) { }
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria)
   async findAll(
     @Query('empresa_id') empresa_id?: string,
     @Query('estado') estado?: string,
@@ -49,7 +49,7 @@ export class OfertasController {
   }
 
   @Get('mis-postulaciones')
-  @Roles(RolNombre.estudiante)
+  @Roles(RolNombre.estudiante, RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async getMisPostulaciones(@CurrentUser() user: any) {
     const estudiante = await this.prismaService.estudiante.findUnique({
       where: { usuario_id: user.id },
@@ -66,7 +66,7 @@ export class OfertasController {
   }
 
   @Get(':id')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria)
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const oferta = await this.ofertasService.findOne(id);
     return { data: oferta };

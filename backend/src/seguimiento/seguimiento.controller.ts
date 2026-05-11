@@ -12,6 +12,7 @@ import { PracticasService } from '../practicas/practicas.service';
 import { CreateSeguimientoDto } from './dto/create-seguimiento.dto';
 import { UpdateSeguimientoDto } from './dto/update-seguimiento.dto';
 import { CreateReporteMensualDto } from './dto/create-reporte-mensual.dto';
+import { ValidarReporteMensualDto } from './dto/validar-reporte-mensual.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -72,6 +73,29 @@ export class SeguimientoController {
   async listarReportesMensuales(@Param('id') id: string) {
     const rows = await this.practicas.listarReportesMensuales(+id);
     return { data: rows };
+  }
+
+  @Put(':id/reportes-mensuales/:reporteId/validar')
+  @Roles(
+    RolNombre.asesor,
+    RolNombre.admin,
+    RolNombre.coordinador,
+    RolNombre.secretaria,
+  )
+  async validarReporteMensual(
+    @Param('id') id: string,
+    @Param('reporteId') reporteId: string,
+    @Body() dto: ValidarReporteMensualDto,
+    @CurrentUser() user: { id: number; roles?: string[] },
+  ) {
+    const row = await this.practicas.validarReporteMensual(
+      +id,
+      +reporteId,
+      user.id,
+      dto,
+      user.roles,
+    );
+    return { data: row, message: 'Reporte mensual actualizado' };
   }
 
   @Post(':id/solicitar-revision-informe-final')

@@ -17,4 +17,8 @@ export default () => ({
     mesesAlertaInactividad: parseInt(process.env.TESIS_MESES_INACTIVIDAD, 10) || 12,
     tipoAvanceBorradorTurnitin: process.env.TESIS_TIPO_AVANCE_TURNITIN || 'borrador_turnitin',
   },
+  upload: {
+    maxBytes: parseInt(process.env.UPLOAD_MAX_BYTES || '', 10) || 20 * 1024 * 1024,
+    dir: process.env.UPLOAD_DIR || '',
+  },
 });

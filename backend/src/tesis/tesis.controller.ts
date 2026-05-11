@@ -14,6 +14,7 @@ import { TesisService } from './tesis.service';
 import { AvancesService } from './avances.service';
 import { CreateTesisDto } from './dto/create-tesis.dto';
 import { UpdateTesisDto } from './dto/update-tesis.dto';
+import { AdminUpdateTesisDto } from './dto/admin-update-tesis.dto';
 import { AsignarJuradoDto } from './dto/asignar-jurado.dto';
 import { CreateAvanceDto } from './dto/create-avance.dto';
 import { UpdateAvanceDto } from './dto/update-avance.dto';
@@ -33,6 +34,7 @@ import {
   CargarComprobantePagoDto,
   VerificarPagoTesisDto,
 } from './dto/pago-tesis.dto';
+import { ValidarDocumentoTesisDto } from './dto/validar-documento-tesis.dto';
 import { RevisionJuradoObservacionesDto } from './dto/revision-jurado.dto';
 
 @Controller('tesis')
@@ -45,7 +47,7 @@ export class TesisController {
   ) {}
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.secretaria, RolNombre.estudiante)
   async findAll(
     @Query('estado') estado?: string,
     @Query('escuela_id') escuela_id?: string,
@@ -60,7 +62,7 @@ export class TesisController {
   }
 
 @Get('estudiante/:estudiante_id')
-@Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+@Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.secretaria, RolNombre.estudiante)
 async findAllByEstudiante(
   @Param('estudiante_id') estudiante_id: string,  // Cambiar @Query a @Param
 ) {
@@ -71,14 +73,21 @@ async findAllByEstudiante(
 }
 
   @Get('estadisticas')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async getEstadisticas() {
     const estadisticas = await this.tesisService.getEstadisticas();
     return { data: estadisticas };
   }
 
+  @Get('secretaria/cola-validacion')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
+  async colaSecretariaPagosDocumentos() {
+    const data = await this.tesisService.colaSecretariaPagosDocumentos();
+    return { data };
+  }
+
   @Put(':id/turnitin/recibo')
-  @Roles(RolNombre.estudiante)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria, RolNombre.estudiante)
   async registrarReciboTurnitin(
     @Param('id') id: string,
     @Body() dto: RegistrarReciboTurnitinDto,
@@ -99,7 +108,7 @@ async findAllByEstudiante(
   }
 
   @Post(':id/documentos')
-  @Roles(RolNombre.estudiante)
+  @Roles(RolNombre.estudiante, RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async subirDocumento(
     @Param('id') id: string,
     @Body() dto: SubirDocumentoTesisDto,
@@ -109,8 +118,40 @@ async findAllByEstudiante(
     return { data: doc, message: 'Documento registrado' };
   }
 
+  @Put(':id/documentos/:documentoId/validar')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
+  async validarDocumentoTesis(
+    @Param('id') id: string,
+    @Param('documentoId') documentoId: string,
+    @Body() dto: ValidarDocumentoTesisDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const row = await this.tesisService.validarDocumentoTesisAdministrativo(
+      +id,
+      +documentoId,
+      user.id,
+      dto,
+    );
+    return { data: row, message: 'Documento actualizado' };
+  }
+
+  @Post(':id/pagos/solicitud')
+  @Roles(RolNombre.estudiante)
+  async solicitudPagoEstudiante(
+    @Param('id') id: string,
+    @Body() dto: CrearPagoTesisDto,
+    @CurrentUser() user: { id: number },
+  ) {
+    const row = await this.tesisService.solicitudPagoTesisPorEstudiante(
+      +id,
+      dto,
+      user.id,
+    );
+    return { data: row, message: 'Solicitud de pago registrada' };
+  }
+
   @Post(':id/pagos')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async crearPago(
     @Param('id') id: string,
     @Body() dto: CrearPagoTesisDto,
@@ -137,7 +178,7 @@ async findAllByEstudiante(
   }
 
   @Put(':id/pagos/:pagoId/verificar')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async verificarPago(
     @Param('id') id: string,
     @Param('pagoId') pagoId: string,
@@ -154,7 +195,7 @@ async findAllByEstudiante(
   }
 
   @Post(':id/jurados/:juradoTesisId/revision/observaciones')
-  @Roles(RolNombre.asesor)
+  @Roles(RolNombre.asesor, RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async juradoObservaciones(
     @Param('id') id: string,
     @Param('juradoTesisId') juradoTesisId: string,
@@ -171,7 +212,7 @@ async findAllByEstudiante(
   }
 
   @Post(':id/jurados/:juradoTesisId/revision/conforme')
-  @Roles(RolNombre.asesor)
+  @Roles(RolNombre.asesor, RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async juradoConforme(
     @Param('id') id: string,
     @Param('juradoTesisId') juradoTesisId: string,
@@ -238,7 +279,7 @@ async findAllByEstudiante(
   }
 
   @Get(':id')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante, RolNombre.secretaria)
   async findOne(@Param('id') id: string) {
     const tesis = await this.tesisService.findOne(+id);
     return { data: tesis };
@@ -249,6 +290,16 @@ async findAllByEstudiante(
   async create(@Body() createTesisDto: CreateTesisDto) {
     const tesis = await this.tesisService.create(createTesisDto);
     return { data: tesis, message: 'Tesis registrada exitosamente' };
+  }
+
+  @Put(':id/admin')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async updateAdmin(
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateTesisDto,
+  ) {
+    const tesis = await this.tesisService.updateAdmin(+id, dto);
+    return { data: tesis, message: 'Tesis actualizada (administración)' };
   }
 
   @Put(':id')

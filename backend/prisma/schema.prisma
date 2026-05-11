@@ -250,6 +250,10 @@ model ReporteMensualPractica {
   horas_reportadas Int
   archivo_url      String?
   observaciones    String?
+  validado         Boolean  @default(false)
+  validado_por     Int?
+  validado_en      DateTime?
+  observaciones_asesor String?
   created_at       DateTime @default(now())
   practica         Practica @relation(fields: [practica_id], references: [id], onDelete: Cascade)
 
