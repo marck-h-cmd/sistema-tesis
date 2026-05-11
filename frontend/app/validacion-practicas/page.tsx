@@ -8,12 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useState, useRef } from 'react';
 import { toast } from 'sonner';
-import { Loader2, ExternalLink, CheckCircle2, FileWarning, CalendarClock } from 'lucide-react';
+import { Loader2, ExternalLink, CheckCircle2, FileWarning, CalendarClock, FileUp } from 'lucide-react';
 import { formatDate } from '@/lib/utils/formatDate';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { uploadPdf } from '@/lib/api/uploadPdf';
 
 const docTipoLabel: Record<string, string> = {
   plan_practicas: 'Plan de prácticas',
@@ -24,18 +27,8 @@ const docTipoLabel: Record<string, string> = {
 
 const MESES_ES = [
   '',
-  'enero',
-  'febrero',
-  'marzo',
-  'abril',
-  'mayo',
-  'junio',
-  'julio',
-  'agosto',
-  'septiembre',
-  'octubre',
-  'noviembre',
-  'diciembre',
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ] as const;
 
 function mesNombre(mes: number): string {
@@ -50,7 +43,6 @@ function apiErrorMessage(e: unknown, fallback: string): string {
   return fallback;
 }
 
-/** Descripción visible en cada tarjeta de documento de práctica no validado. */
 function describeDocumentoPractica(doc: Record<string, unknown>): string {
   const tipoRaw = typeof doc.tipo === 'string' ? doc.tipo : '';
   const tipo = docTipoLabel[tipoRaw] || tipoRaw || 'Documento';
@@ -60,19 +52,23 @@ function describeDocumentoPractica(doc: Record<string, unknown>): string {
       : null;
   const subido =
     typeof doc.subido_en === 'string' ? formatDate(doc.subido_en as string) : null;
-  const archivo = typeof doc.archivo_url === 'string' && doc.archivo_url ? 'Hay archivo cargado para revisión.' : 'Sin archivo.';
+  const archivo =
+    typeof doc.archivo_url === 'string' && doc.archivo_url
+      ? 'Hay archivo cargado para revisión.'
+      : 'Sin archivo.';
   const nomPart = nombreOriginal ? ` Nombre original: «${nombreOriginal}».` : '';
   const fechaPart = subido ? ` Subido el ${subido}.` : '';
   return `${tipo}: constancia en el expediente de prácticas profesionales.${nomPart}${fechaPart} ${archivo}`;
 }
 
-/** Descripción visible para reporte mensual pendiente de validación. */
 function describeReporteMensual(rep: Record<string, unknown>): string {
   const anio = typeof rep.anio === 'number' ? rep.anio : '—';
   const mesNum = typeof rep.mes === 'number' ? rep.mes : 0;
   const horas = typeof rep.horas_reportadas === 'number' ? rep.horas_reportadas : '—';
   const archivoUrl = typeof rep.archivo_url === 'string' && rep.archivo_url;
-  const pdfPart = archivoUrl ? 'Adjunto: PDF mensual cargado por el estudiante.' : 'Aún sin PDF mensual cargado.';
+  const pdfPart = archivoUrl
+    ? 'Adjunto: PDF mensual cargado por el estudiante.'
+    : 'Aún sin PDF mensual cargado.';
   const obsEst =
     typeof rep.observaciones === 'string' && rep.observaciones.trim()
       ? ` Notas del estudiante: ${rep.observaciones.trim()}.`
@@ -80,26 +76,179 @@ function describeReporteMensual(rep: Record<string, unknown>): string {
   const creado =
     typeof rep.created_at === 'string' ? formatDate(rep.created_at as string) : null;
   const crePart = creado ? ` Registrado en el sistema el ${creado}.` : '';
-
   return `Reporte mensual de ejecución (${mesNombre(mesNum)} ${anio}): horas declaradas para ese período.${crePart} El estudiante reporta ${horas} horas en el mes.${obsEst} ${pdfPart}`;
 }
 
+// ── Sección exclusiva para asesor: aprobar informe final ──────────────────────
+function AsesorInformeCard({
+  practica,
+  onSuccess,
+}: {
+  practica: Record<string, unknown>;
+  onSuccess: () => void;
+}) {
+  const [actaUrl, setActaUrl] = useState('');
+  const [obs, setObs] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const actaFileRef = useRef<HTMLInputElement>(null);
+
+  const mAprobar = useMutation({
+    mutationFn: (body: { acta_aprobacion_url?: string; observaciones?: string }) =>
+      practicasApi.aprobarInforme(practica.id as number, body),
+    onSuccess: () => {
+      toast.success('Informe final aprobado — práctica cerrada');
+      setActaUrl('');
+      setObs('');
+      onSuccess();
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e, 'Error al aprobar')),
+  });
+
+  const subirActa = async (file: File) => {
+    setUploading(true);
+    try {
+      const up = await uploadPdf(file);
+      setActaUrl(up.url);
+      toast.success('Acta subida — confirma la aprobación');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Error al subir PDF');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const est = practica.estudiante as Record<string, unknown> | undefined;
+  const u = est?.usuario as Record<string, unknown> | undefined;
+  const nombre = u ? `${u.nombres} ${u.apellidos}` : '—';
+  const postId = practica.postulacion_id as number;
+
+  return (
+    <div className="border rounded-lg p-4 space-y-4">
+      <div className="flex flex-wrap justify-between gap-2">
+        <div>
+          <Badge variant="secondary">Informe final pendiente</Badge>
+          <p className="font-medium mt-2">{nombre}</p>
+          <p className="text-xs text-muted-foreground">Práctica #{String(practica.id)}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {typeof practica.informe_final_url === 'string' && practica.informe_final_url && (
+            <a
+              href={practica.informe_final_url as string}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm text-primary underline inline-flex items-center"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Ver informe PDF
+            </a>
+          )}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/practicas/expediente/${postId}`}>Expediente</Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Acta de aprobación */}
+      <div className="space-y-2">
+        <Label>Acta de aprobación (PDF)</Label>
+        <input
+          ref={actaFileRef}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) subirActa(f);
+            e.target.value = '';
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={uploading}
+            onClick={() => actaFileRef.current?.click()}
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <FileUp className="h-4 w-4 mr-2" />
+                Subir acta PDF
+              </>
+            )}
+          </Button>
+          {actaUrl && (
+            <a
+              href={actaUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm text-primary underline inline-flex items-center"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Ver acta subida
+            </a>
+          )}
+        </div>
+        <Label className="text-muted-foreground text-xs">O pegar URL externa</Label>
+        <Input
+          value={actaUrl}
+          onChange={(e) => setActaUrl(e.target.value)}
+          placeholder="https://... (opcional)"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <Label>Observaciones (opcional)</Label>
+        <Textarea
+          value={obs}
+          onChange={(e) => setObs(e.target.value)}
+          rows={2}
+          placeholder="Comentarios para el expediente..."
+        />
+      </div>
+
+      <Button
+        disabled={mAprobar.isPending || (!practica.informe_final_url && !actaUrl.trim())}
+        onClick={() =>
+          mAprobar.mutate({
+            acta_aprobacion_url: actaUrl.trim() || undefined,
+            observaciones: obs.trim() || undefined,
+          })
+        }
+      >
+        {mAprobar.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+        ) : (
+          <CheckCircle2 className="h-4 w-4 mr-2" />
+        )}
+        Aprobar informe y cerrar práctica
+      </Button>
+    </div>
+  );
+}
+
+// ── Página principal ──────────────────────────────────────────────────────────
 export default function SecretariaValidacionPracticasPage() {
   const { hasRole, user } = useAuth();
   const router = useRouter();
   const qc = useQueryClient();
   const [obsByKey, setObsByKey] = useState<Record<string, string>>({});
 
+  const esAsesor = hasRole('asesor');
+  const esSecretariaOAdmin = hasRole('secretaria') || hasRole('admin');
+
   useEffect(() => {
-    if (user && !hasRole('secretaria') && !hasRole('admin')) {
+    if (user && !esSecretariaOAdmin && !esAsesor) {
       router.replace('/dashboard');
     }
-  }, [user, hasRole, router]);
+  }, [user, esSecretariaOAdmin, esAsesor, router]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['practicas-secretaria-cola'],
     queryFn: () => practicasApi.secretariaCola().then((r) => r.data.data),
-    enabled: hasRole('secretaria') || hasRole('admin'),
+    enabled: esSecretariaOAdmin || esAsesor,
   });
 
   const mValidarDoc = useMutation({
@@ -138,7 +287,7 @@ export default function SecretariaValidacionPracticasPage() {
     onError: (e: unknown) => toast.error(apiErrorMessage(e, 'Error')),
   });
 
-  if (!user || (!hasRole('secretaria') && !hasRole('admin'))) {
+  if (!user || (!esSecretariaOAdmin && !esAsesor)) {
     return (
       <div className="p-8 flex justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -157,7 +306,51 @@ export default function SecretariaValidacionPracticasPage() {
   const planes = data?.planes_pendientes ?? [];
   const docs = data?.documentos_sin_validar ?? [];
   const reportes = data?.reportes_mensuales_sin_validar ?? [];
+  // Prácticas con informe final cargado y pendientes de aprobación del asesor
+  const informesPendientes: Record<string, unknown>[] =
+    data?.informes_pendientes_asesor ?? [];
 
+  // ── Vista asesor: solo aprobación de informes finales ─────────────────────
+  if (esAsesor && !esSecretariaOAdmin) {
+    return (
+      <div className="container max-w-4xl mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold">Aprobación de informes finales</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Informes finales de prácticas pendientes de tu firma de aprobación.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              Informes pendientes de aprobación
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {informesPendientes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No hay informes finales pendientes de aprobación.
+              </p>
+            ) : (
+              informesPendientes.map((p) => (
+                <AsesorInformeCard
+                  key={String(p.id)}
+                  practica={p}
+                  onSuccess={() =>
+                    qc.invalidateQueries({ queryKey: ['practicas-secretaria-cola'] })
+                  }
+                />
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Vista secretaría / admin: cola completa ───────────────────────────────
   return (
     <div className="container max-w-4xl mx-auto px-4 py-8">
       <div className="mb-8">
@@ -193,8 +386,8 @@ export default function SecretariaValidacionPracticasPage() {
                   <div className="space-y-2 max-w-xl">
                     <p className="font-medium">{nombre}</p>
                     <p className="text-sm text-muted-foreground leading-snug">
-                      Plan de prácticas en PDF: documento inicial del expediente, pendiente del visto bueno de
-                      secretaría para pasar la práctica al estado de ejecución.
+                      Plan de prácticas en PDF: documento inicial del expediente, pendiente del
+                      visto bueno de secretaría para pasar la práctica al estado de ejecución.
                       {typeof p.plan_practicas_subido_en === 'string' && (
                         <> Subido el {formatDate(p.plan_practicas_subido_en as string)}.</>
                       )}
@@ -216,7 +409,9 @@ export default function SecretariaValidacionPracticasPage() {
                       </a>
                     ) : null}
                     <Button asChild size="sm">
-                      <Link href={`/practicas/expediente/${postId}`}>Abrir expediente — validar</Link>
+                      <Link href={`/practicas/expediente/${postId}`}>
+                        Abrir expediente — validar
+                      </Link>
                     </Button>
                   </div>
                 </div>
@@ -234,6 +429,7 @@ export default function SecretariaValidacionPracticasPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-8">
+          {/* Documentos */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 border-b pb-2">
               <Badge variant="outline">Documentos</Badge>
@@ -254,13 +450,37 @@ export default function SecretariaValidacionPracticasPage() {
                 const key = `doc:${docId}`;
                 const obs = obsByKey[key] ?? '';
 
+                // Informe final → flujo de aprobación del asesor
+                if (d.tipo === 'informe_final') {
+                  // Construimos un objeto "practica-like" compatible con AsesorInformeCard
+                  const practicaProxy: Record<string, unknown> = {
+                    ...(pr ?? {}),
+                    // El archivo del informe viene en el documento, no en la práctica
+                    informe_final_url: d.archivo_url ?? pr?.informe_final_url,
+                    postulacion_id: pr?.postulacion_id,
+                    estudiante: pr?.estudiante,
+                  };
+                  return (
+                    <AsesorInformeCard
+                      key={key}
+                      practica={practicaProxy}
+                      onSuccess={() =>
+                        qc.invalidateQueries({ queryKey: ['practicas-secretaria-cola'] })
+                      }
+                    />
+                  );
+                }
+
+                // Resto de documentos → validación estándar
                 return (
                   <div key={key} className="border rounded-lg p-4 space-y-3">
                     <div className="flex flex-wrap justify-between gap-2">
                       <div>
                         <Badge variant="secondary">{tipo}</Badge>
                         <p className="font-medium mt-2">{nombre}</p>
-                        <p className="text-xs text-muted-foreground">Documento práctica #{docId}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Documento práctica #{docId}
+                        </p>
                         <p className="text-sm text-muted-foreground mt-3 leading-snug">
                           {describeDocumentoPractica(d)}
                         </p>
@@ -325,16 +545,20 @@ export default function SecretariaValidacionPracticasPage() {
             )}
           </div>
 
+          {/* Reportes mensuales */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 border-b pb-2">
               <CalendarClock className="h-4 w-4 shrink-0" />
               <Badge variant="outline">Reportes mensuales</Badge>
               <span className="text-sm text-muted-foreground">
-                Seguimiento de horas mensuales; validación habilitada para secretaría y administración
+                Seguimiento de horas mensuales; validación habilitada para secretaría y
+                administración
               </span>
             </div>
             {reportes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No hay reportes mensuales pendientes.</p>
+              <p className="text-sm text-muted-foreground">
+                No hay reportes mensuales pendientes.
+              </p>
             ) : (
               reportes.map((rep: Record<string, unknown>) => {
                 const pr = rep.practica as Record<string, unknown> | undefined;
@@ -345,7 +569,6 @@ export default function SecretariaValidacionPracticasPage() {
                 const practicaId = rep.practica_id as number;
                 const key = `rep:${repId}`;
                 const obs = obsByKey[key] ?? '';
-
                 const anio = rep.anio as number;
                 const mesNum = rep.mes as number;
                 const etiquetaPeriodo = `${mesNombre(mesNum)} ${anio}`;
@@ -354,7 +577,9 @@ export default function SecretariaValidacionPracticasPage() {
                   <div key={key} className="border rounded-lg p-4 space-y-3">
                     <div className="flex flex-wrap justify-between gap-2">
                       <div>
-                        <Badge variant="secondary">Reporte mensual · {etiquetaPeriodo}</Badge>
+                        <Badge variant="secondary">
+                          Reporte mensual · {etiquetaPeriodo}
+                        </Badge>
                         <p className="font-medium mt-2">{nombre}</p>
                         <p className="text-xs text-muted-foreground">
                           Reporte #{repId} · Práctica #{practicaId}

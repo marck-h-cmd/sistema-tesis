@@ -17,6 +17,7 @@ import {
   CheckCircle,
   ClipboardList,
   Wallet,
+  Scale,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -35,6 +36,12 @@ const menuItems = [
     roles: ['secretaria', 'admin', 'coordinador'],
   },
   { href: '/revision-avances', label: 'Revisión Avances', icon: CheckCircle, roles: ['admin', 'asesor', 'coordinador'] },
+  {
+    href: '/revision-conformidad-jurado',
+    label: 'Revisión jurado (conformidad)',
+    icon: Scale,
+    roles: ['asesor', 'coordinador', 'admin'],
+  },
   { href: '/practicas', label: 'Prácticas', icon: Briefcase, roles: ['admin', 'coordinador', 'secretaria', 'asesor', 'estudiante', 'empresa'] },
   {
     href: '/validacion-practicas',

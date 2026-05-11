@@ -428,6 +428,74 @@ export class TesisService {
     });
   }
 
+  /** Tesis donde el usuario docente figura como jurado, con última revisión y documentos enviados. */
+  async listMisAsignacionesJurado(usuarioId: number) {
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { usuario_id: usuarioId },
+      select: { id: true },
+    });
+    if (!asesor) {
+      return [];
+    }
+
+    return this.prisma.juradoTesis.findMany({
+      where: { asesor_id: asesor.id },
+      include: {
+        revisiones: { orderBy: { id: 'desc' }, take: 1 },
+        tesis: {
+          select: {
+            id: true,
+            titulo: true,
+            estado: true,
+            similitud_turnitin: true,
+            created_at: true,
+            estudiante: {
+              select: {
+                usuario: {
+                  select: {
+                    nombres: true,
+                    apellidos: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+            asesor_principal: {
+              select: {
+                usuario: {
+                  select: { nombres: true, apellidos: true },
+                },
+              },
+            },
+            documentos: {
+              where: {
+                tipo: {
+                  in: [
+                    TipoDocumentoTesis.tesis_final,
+                    TipoDocumentoTesis.version_corregida,
+                    TipoDocumentoTesis.anexos,
+                  ],
+                },
+              },
+              orderBy: [{ subido_en: 'desc' }],
+              take: 8,
+              select: {
+                id: true,
+                tipo: true,
+                archivo_url: true,
+                nombre_original: true,
+                version: true,
+                subido_en: true,
+                validado: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { asignado_en: 'desc' },
+    });
+  }
+
   async crearActa(id: number, actaData: {
     fecha: string;
     lugar?: string;

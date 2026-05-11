@@ -162,6 +162,8 @@ export const tesisApi = {
   /** Cola administrativa: pagos pendientes + documentos tesis sin validar */
   secretariaColaValidacion: () =>
     apiClient.get('/tesis/secretaria/cola-validacion'),
+  /** Designaciones como miembro de jurado y documentos a revisar */
+  misRevisionesJurado: () => apiClient.get('/tesis/jurado/mis-revisiones'),
   solicitudPagoEstudiante: (
     id: number,
     body: { tipo: string; monto: number; observaciones?: string },

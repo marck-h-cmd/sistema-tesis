@@ -86,6 +86,13 @@ async findAllByEstudiante(
     return { data };
   }
 
+  @Get('jurado/mis-revisiones')
+  @Roles(RolNombre.asesor, RolNombre.coordinador, RolNombre.admin)
+  async misRevisionesComoJurado(@CurrentUser() user: { id: number }) {
+    const data = await this.tesisService.listMisAsignacionesJurado(user.id);
+    return { data };
+  }
+
   @Put(':id/turnitin/recibo')
   @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria, RolNombre.estudiante)
   async registrarReciboTurnitin(

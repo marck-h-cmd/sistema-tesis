@@ -20,6 +20,7 @@ import { AprobarInformeDto } from './dto/aprobar-informe.dto';
 import { UpdatePracticaAdminDto } from './dto/update-practica-admin.dto';
 import { ValidarDocumentoPracticaDto } from './dto/validar-documento-practica.dto';
 
+
 const practicaFullInclude = {
   estudiante: {
     include: {
@@ -692,32 +693,36 @@ export class PracticasService {
     dto: AprobarInformeDto,
   ) {
     const practica = await this.findOne(practicaId);
-    const asesor = await this.prisma.asesor.findUnique({
-      where: { usuario_id: usuarioId },
+  
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      include: { roles: { include: { rol: true } } },
     });
-
-    if (
-      !asesor ||
-      practica.asesor_id == null ||
-      asesor.id !== practica.asesor_id
-    ) {
+  
+    const rolesNombres = usuario?.roles.map((r) => r.rol.nombre) ?? [];
+    const esAutorizado =
+      rolesNombres.includes('asesor') ||
+      rolesNombres.includes('admin') ||
+      rolesNombres.includes('secretaria');
+  
+    if (!esAutorizado) {
       throw new ForbiddenException(
-        'Solo el asesor asignado puede aprobar el informe final.',
+        'Solo el asesor o personal administrativo puede aprobar el informe final.',
       );
     }
-
+  
     if (practica.estado !== EstadoPractica.informe_pendiente) {
       throw new ConflictException(
         'El informe debe estar pendiente de firma/aprobación del asesor.',
       );
     }
-
+  
     if (!practica.informe_final_url && !dto.acta_aprobacion_url) {
       throw new ConflictException(
         'Debe existir un informe cargado o adjuntar el acta de aprobación.',
       );
     }
-
+  
     const porcentajeCumplido =
       practica.horas_totales > 0
         ? (practica.horas_cumplidas / practica.horas_totales) * 100
@@ -727,7 +732,7 @@ export class PracticasService {
         `No cumple el mínimo de horas (${porcentajeCumplido.toFixed(1)}%).`,
       );
     }
-
+  
     if (dto.acta_aprobacion_url) {
       await this.prisma.documentoPractica.create({
         data: {
@@ -738,19 +743,24 @@ export class PracticasService {
         },
       });
     }
-
+  
     await this.prisma.postulacion.update({
       where: { id: practica.postulacion_id },
       data: { estado: EstadoPostulacion.finalizado },
     });
-
+  
+    // Buscar asesor solo si el usuario tiene ese rol; puede ser null para admin/secretaría
+    const asesor = rolesNombres.includes('asesor')
+      ? await this.prisma.asesor.findUnique({ where: { usuario_id: usuarioId } })
+      : null;
+  
     return this.prisma.practica.update({
       where: { id: practicaId },
       data: {
         estado: EstadoPractica.aprobado,
         informe_aprobado: true,
         informe_aprobado_en: new Date(),
-        informe_aprobado_por: asesor.id,
+        informe_aprobado_por: asesor?.id ?? null,  // null si aprueba admin/secretaría
         informe_observaciones: dto.observaciones ?? undefined,
       },
       include: practicaFullInclude,

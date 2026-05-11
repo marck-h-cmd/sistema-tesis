@@ -42,7 +42,7 @@ export class PracticasController {
   }
 
   @Put(':id/documentos/:documentoId/validar')
-  @Roles(RolNombre.secretaria, RolNombre.admin)
+  @Roles(RolNombre.secretaria, RolNombre.admin, RolNombre.asesor)
   async validarDocumento(
     @Param('id') id: string,
     @Param('documentoId') documentoId: string,
@@ -114,7 +114,7 @@ export class PracticasController {
   }
 
   @Put(':id/plan/validar')
-  @Roles(RolNombre.secretaria, RolNombre.admin)
+  @Roles(RolNombre.secretaria, RolNombre.admin, RolNombre.asesor)
   async validarPlan(
     @Param('id') id: string,
     @Body() dto: ValidarPlanDto,
@@ -141,7 +141,7 @@ export class PracticasController {
   }
 
   @Put(':id/informe-final/acta')
-  @Roles(RolNombre.asesor)
+  @Roles(RolNombre.asesor, RolNombre.secretaria, RolNombre.admin)
   async actaAsesor(
     @Param('id') id: string,
     @Body() dto: SubirArchivoPracticaDto,
@@ -157,7 +157,7 @@ export class PracticasController {
   }
 
   @Put(':id/informe-final/aprobar')
-  @Roles(RolNombre.asesor)
+  @Roles(RolNombre.asesor, RolNombre.secretaria, RolNombre.admin)
   async aprobarInforme(
     @Param('id') id: string,
     @Body() dto: AprobarInformeDto,
