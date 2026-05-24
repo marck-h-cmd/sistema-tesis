@@ -192,6 +192,7 @@ export class PostulacionesService {
         fecha_postulacion: new Date(),
         requiere_convenio_especifico: requiereConvenioEspecifico,
         estado_convenio_especifico: estadoConvenioEspecifico,
+        cv_url: createPostulacionDto.cv_url,
         ...(createPostulacionDto.asesor_academico_id && {
           asesor_academico_id: createPostulacionDto.asesor_academico_id,
         }),
@@ -217,16 +218,16 @@ export class PostulacionesService {
   async updateEstado(id: number, updatePostulacionDto: UpdatePostulacionDto) {
     const postulacion = await this.findOne(id);
 
-    if (updatePostulacionDto.estado === 'aceptado') {
-      if (
-        postulacion.requiere_convenio_especifico &&
-        postulacion.estado_convenio_especifico !== EstadoConvenioEspecifico.aprobado
-      ) {
-        throw new ConflictException(
-          'No se puede aceptar la postulación: el convenio específico debe estar aprobado.',
-        );
-      }
-    }
+    // if (updatePostulacionDto.estado === 'aceptado') {
+    //   if (
+    //     postulacion.requiere_convenio_especifico &&
+    //     postulacion.estado_convenio_especifico !== EstadoConvenioEspecifico.aprobado
+    //   ) {
+    //     throw new ConflictException(
+    //       'No se puede aceptar la postulación: el convenio específico debe estar aprobado.',
+    //     );
+    //   }
+    // }
 
     const data: any = { estado: updatePostulacionDto.estado };
 
@@ -245,6 +246,17 @@ export class PostulacionesService {
             horas_totales: 300,
             estado: EstadoPractica.plan_pendiente,
           },
+        });
+      }
+
+      // Reducir vacantes de la OfertaPractica
+      const oferta = await this.prisma.ofertaPractica.findUnique({
+        where: { id: postulacion.oferta_id }
+      });
+      if (oferta && oferta.vacantes > 0) {
+        await this.prisma.ofertaPractica.update({
+          where: { id: oferta.id },
+          data: { vacantes: oferta.vacantes - 1 }
         });
       }
     }

@@ -471,6 +471,7 @@ model Postulacion {
   oferta_id                    Int
   estudiante_id                Int
   asesor_academico_id          Int?
+  cv_url                       String?                 // PDF del CV subido por el estudiante
   fecha_postulacion            DateTime                @default(now()) @db.Date
   estado                       EstadoPostulacion       @default(postulado)
   requiere_convenio_especifico Boolean                 @default(false)

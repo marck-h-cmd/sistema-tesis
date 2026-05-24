@@ -321,7 +321,20 @@ function PostulacionCard({ postulacion }: { postulacion: any }) {
           </div>
         )}
 
-        <div className="mt-4 pt-4 border-t">
+        <div className="mt-4 pt-4 border-t space-y-2">
+          {postulacion.cv_url && (
+            <a 
+              href={`http://localhost:4000${postulacion.cv_url}`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block"
+            >
+              <Button variant="secondary" className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700">
+                <FileText className="h-4 w-4 mr-2" />
+                Ver mi CV
+              </Button>
+            </a>
+          )}
           <Link href={`/practicas/${postulacion.oferta.id}`}>
             <Button variant="outline" className="w-full">
               <Eye className="h-4 w-4 mr-2" />

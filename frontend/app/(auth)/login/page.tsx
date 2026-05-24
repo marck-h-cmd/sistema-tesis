@@ -13,6 +13,7 @@ const TEST_CREDENTIALS = [
   { label: 'Estudiante', email: 'carlos.lopez@unitru.edu.pe', password: 'Estu123@' },
   { label: 'Asesor', email: 'juan.garcia@unitru.edu.pe', password: 'Asesor123@' },
   { label: 'Secretaria', email: 'secretaria.sistemas@unitru.edu.pe', password: 'Secre123@' },
+  { label: 'Empresa', email: 'rrhh@techcorp.com', password: 'Empresa123@' },
 ];
 
 export default function LoginPage() {

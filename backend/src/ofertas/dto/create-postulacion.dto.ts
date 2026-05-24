@@ -1,4 +1,4 @@
-import { IsInt, IsOptional } from 'class-validator';
+import { IsInt, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreatePostulacionDto {
@@ -14,4 +14,9 @@ export class CreatePostulacionDto {
   @IsInt()
   @IsOptional()
   asesor_academico_id?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  cv_url?: string;
 }

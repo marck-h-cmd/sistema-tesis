@@ -34,7 +34,7 @@ export class OfertasController {
   ) { }
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria, RolNombre.empresa)
   async findAll(
     @Query('empresa_id') empresa_id?: string,
     @Query('estado') estado?: string,
@@ -66,7 +66,7 @@ export class OfertasController {
   }
 
   @Get(':id')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria, RolNombre.empresa)
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const oferta = await this.ofertasService.findOne(id);
     return { data: oferta };
@@ -105,9 +105,9 @@ export class OfertasController {
 
   // Postulaciones
   @Get(':id/postulaciones')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante, RolNombre.empresa)
   async getPostulaciones(@Param('id', ParseIntPipe) ofertaId: number) {
-    const postulaciones = await this.postulacionesService.findAll();
+    const postulaciones = await this.postulacionesService.findByOferta(ofertaId);
     return { data: postulaciones };
   }
 
@@ -116,6 +116,7 @@ export class OfertasController {
   @Roles(RolNombre.estudiante)
   async postular(
     @Param('id', ParseIntPipe) ofertaId: number,
+    @Body() body: { cv_url?: string },
     @CurrentUser() user: any,
   ) {
     // Buscar el estudiante por el usuario_id
@@ -131,13 +132,14 @@ export class OfertasController {
     const postulacion = await this.postulacionesService.create({
       oferta_id: ofertaId,
       estudiante_id: estudiante.id,
+      cv_url: body.cv_url,
     });
 
     return { data: postulacion, message: 'Postulación realizada exitosamente' };
   }
 
   @Put('postulaciones/:postulacionId/estado')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.empresa)
   async updateEstadoPostulacion(
     @Param('postulacionId', ParseIntPipe) postulacionId: number,
     @Body() updatePostulacionDto: UpdatePostulacionDto,

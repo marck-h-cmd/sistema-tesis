@@ -55,6 +55,7 @@ const menuItems = [
   { href: '/estudiantes', label: 'Estudiantes', icon: Users, roles: ['admin', 'coordinador', 'asesor', 'secretaria'] },
   { href: '/empresas', label: 'Empresas', icon: Building2, roles: ['admin', 'coordinador', 'estudiante', 'secretaria'] },
   { href: '/reportes', label: 'Reportes', icon: FileText, roles: ['admin', 'coordinador', 'secretaria'] },
+  { href: '/postulaciones-empresa', label: 'Postulaciones a mis practicas', icon: Briefcase, roles: [  'empresa','admin','secretaria'] },
 ];
 
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {

@@ -65,6 +65,7 @@ export class PracticasController {
     RolNombre.secretaria,
     RolNombre.asesor,
     RolNombre.estudiante,
+    RolNombre.empresa,
   )
   async listByEstudiante(@Param('estudianteId') estudianteId: string) {
     const rows = await this.practicas.findByEstudiante(+estudianteId);
@@ -78,6 +79,7 @@ export class PracticasController {
     RolNombre.secretaria,
     RolNombre.asesor,
     RolNombre.estudiante,
+    RolNombre.empresa,
   )
   async byPostulacion(@Param('postulacionId') postulacionId: string) {
     const row = await this.practicas.findByPostulacion(+postulacionId);
@@ -91,6 +93,7 @@ export class PracticasController {
     RolNombre.secretaria,
     RolNombre.asesor,
     RolNombre.estudiante,
+    RolNombre.empresa,
   )
   async findOne(@Param('id') id: string) {
     const row = await this.practicas.findOne(+id);
