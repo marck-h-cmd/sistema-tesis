@@ -23,6 +23,15 @@ import {
   Eye,
   Loader2,
   Lock,
+  GraduationCap,
+  CircleDollarSign,
+  Users,
+  CheckCircle2,
+  AlertCircle,
+  BookOpen,
+  PlusCircle,
+  CalendarClock,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog } from '@/components/ui/dialog';
@@ -33,16 +42,16 @@ import { Select } from '@/components/ui/select';
 import { AvanceEditForm } from '@/components/forms/AvanceEditForm';
 
 const estadosTesis: Record<string, { color: string; label: string }> = {
-  propuesta: { color: 'bg-blue-100 text-blue-800', label: 'Propuesta' },
-  desarrollo: { color: 'bg-yellow-100 text-yellow-800', label: 'En desarrollo' },
-  en_revision: { color: 'bg-amber-100 text-amber-900', label: 'En revisión (jurado)' },
-  observaciones_emitidas: { color: 'bg-orange-100 text-orange-900', label: 'Observaciones del jurado' },
-  observaciones_levantadas: { color: 'bg-cyan-100 text-cyan-900', label: 'Correcciones cargadas' },
-  aprobado_jurado: { color: 'bg-indigo-100 text-indigo-900', label: 'Aprobado por jurado' },
-  expedito: { color: 'bg-emerald-100 text-emerald-900', label: 'Expedito' },
-  sustentacion_programada: { color: 'bg-purple-100 text-purple-900', label: 'Sustentación programada' },
-  sustentado: { color: 'bg-violet-100 text-violet-900', label: 'Sustentado' },
-  culminado: { color: 'bg-green-100 text-green-800', label: 'Culminado' },
+  propuesta: { color: 'bg-blue-50 text-blue-700 border-blue-200/80', label: 'Propuesta' },
+  desarrollo: { color: 'bg-yellow-50 text-yellow-700 border-yellow-200/80', label: 'En desarrollo' },
+  en_revision: { color: 'bg-amber-50 text-amber-800 border-amber-200/80', label: 'En revisión (jurado)' },
+  observaciones_emitidas: { color: 'bg-orange-50 text-orange-800 border-orange-200/80', label: 'Observaciones del jurado' },
+  observaciones_levantadas: { color: 'bg-cyan-50 text-cyan-800 border-cyan-200/80', label: 'Correcciones cargadas' },
+  aprobado_jurado: { color: 'bg-indigo-50 text-indigo-800 border-indigo-200/80', label: 'Aprobado por jurado' },
+  expedito: { color: 'bg-emerald-50 text-emerald-800 border-emerald-200/80', label: 'Expedito' },
+  sustentacion_programada: { color: 'bg-purple-50 text-purple-800 border-purple-200/80', label: 'Sustentación programada' },
+  sustentado: { color: 'bg-violet-50 text-violet-800 border-violet-200/80', label: 'Sustentado' },
+  culminado: { color: 'bg-green-50 text-green-800 border-green-200/80', label: 'Culminado' },
 };
 
 const DOC_TIPOS = [
@@ -59,6 +68,19 @@ const PAGO_TIPOS = [
   { value: 'carpeta_tesis', label: 'Carpeta tesis' },
   { value: 'derecho_sustentacion', label: 'Derecho sustentación' },
 ];
+
+const PAGO_LABELS: Record<string, string> = {
+  turnitin: 'Turnitin',
+  carpeta_tesis: 'Carpeta tesis',
+  derecho_sustentacion: 'Derecho sustentación',
+};
+
+const PAGO_ESTADO_CONFIG: Record<string, { color: string; label: string }> = {
+  pendiente: { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Pendiente' },
+  comprobante_cargado: { color: 'bg-blue-50 text-blue-700 border-blue-200', label: 'Verificación pendiente' },
+  verificado: { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Pagado' },
+  rechazado: { color: 'bg-rose-50 text-rose-700 border-rose-200', label: 'Rechazado' },
+};
 
 export default function TesisDetailPage() {
   const { id } = useParams();
@@ -125,18 +147,30 @@ export default function TesisDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="flex flex-col justify-center items-center py-24 space-y-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground font-medium">Cargando detalles de la tesis...</p>
       </div>
     );
   }
 
   if (!tesis) {
-    return <p className="text-center py-12 text-gray-500">Tesis no encontrada</p>;
+    return (
+      <div className="p-8 text-center min-h-[40vh] flex flex-col items-center justify-center bg-card rounded-lg border border-dashed shadow-sm space-y-3">
+        <AlertCircle className="h-10 w-10 text-muted-foreground" />
+        <p className="font-semibold text-lg text-foreground">Tesis no encontrada</p>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          No pudimos localizar la tesis solicitada. Por favor, regrese al listado principal.
+        </p>
+        <Button asChild variant="outline" className="mt-2">
+          <Link href="/tesis">Volver a mis tesis</Link>
+        </Button>
+      </div>
+    );
   }
 
   const estadoConfig = estadosTesis[tesis.estado] || {
-    color: 'bg-gray-100 text-gray-800',
+    color: 'bg-muted text-muted-foreground border-border',
     label: String(tesis.estado),
   };
 
@@ -157,7 +191,7 @@ export default function TesisDetailPage() {
       window.open(url, '_blank', 'noopener,noreferrer');
       window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
     } catch {
-      alert('No se pudo generar el documento PDF');
+      toast.error('No se pudo generar el documento PDF');
     } finally {
       setIsViewingPdf(false);
     }
@@ -177,7 +211,7 @@ export default function TesisDetailPage() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch {
-      alert('No se pudo descargar el informe PDF');
+      toast.error('No se pudo descargar el informe PDF');
     } finally {
       setIsDownloadingPdf(false);
     }
@@ -196,7 +230,6 @@ export default function TesisDetailPage() {
 
   const handleAssignJurado = async (event: React.FormEvent) => {
     event.preventDefault();
-    console.log('selectedAsesorId', selectedAsesorId);
     if (!selectedAsesorId || !selectedJuradoRole) {
       toast.error('Selecciona un asesor y un rol para el jurado');
       return;
@@ -204,7 +237,7 @@ export default function TesisDetailPage() {
     setIsAssigningJurado(true);
     try {
       await tesisApi.asignarJurados(tesisId, [{ asesor_id: selectedAsesorId, rol: selectedJuradoRole }]);
-      toast.success('Jurado asignado');
+      toast.success('Jurado asignado exitosamente');
       setOpenAssignModal(false);
       setSelectedAsesorId(null);
       setSelectedJuradoRole('');
@@ -236,7 +269,7 @@ export default function TesisDetailPage() {
         nota_final: actaNota ? Number(actaNota) : undefined,
         archivo_acta_pdf,
       });
-      toast.success('Acta registrada');
+      toast.success('Acta de sustentación registrada con éxito');
       setOpenActaModal(false);
       setActaFecha('');
       setActaLugar('');
@@ -274,12 +307,12 @@ export default function TesisDetailPage() {
     setIsReviewing(true);
     try {
       await tesisApi.revisarAvance(avanceId, estado, reviewObservaciones || undefined);
-      toast.success('Avance actualizado');
+      toast.success('Avance calificado correctamente');
       setReviewingAvance(null);
       setReviewObservaciones('');
       refetch();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Error');
+      toast.error(error?.response?.data?.message || 'Error al calificar avance');
     } finally {
       setIsReviewing(false);
     }
@@ -296,15 +329,14 @@ export default function TesisDetailPage() {
 
   const handleEditarAvance = async (data: any) => {
     if (!editingAvance) return;
-    console.log('data', data);
     setIsEditing(true);
     try {
       await tesisApi.updateAvance(editingAvance.id, data);
-      toast.success('Avance actualizado');
+      toast.success('Avance modificado exitosamente');
       setEditingAvance(null);
       refetch();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Error');
+      toast.error(error?.response?.data?.message || 'Error al guardar modificaciones');
       throw error;
     } finally {
       setIsEditing(false);
@@ -313,18 +345,18 @@ export default function TesisDetailPage() {
 
   const subirDocumento = async () => {
     if (!docUrl.trim()) {
-      toast.error('Indica la URL del archivo');
+      toast.error('Indique una URL válida para el archivo');
       return;
     }
     try {
       await tesisApi.subirDocumento(tesisId, { tipo: docTipo, archivo_url: docUrl.trim() });
-      toast.success('Documento registrado');
+      toast.success('Documento cargado correctamente');
       setDocUrl('');
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-checklist', tesisId] });
       qc.invalidateQueries({ queryKey: ['tesis-secretaria-cola-validacion'] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al cargar documento');
     }
   };
 
@@ -335,20 +367,20 @@ export default function TesisDetailPage() {
         monto: Number(nuevoPagoMonto),
         ...(nuevoPagoObs.trim() ? { observaciones: nuevoPagoObs.trim() } : {}),
       });
-      toast.success('Pago registrado');
+      toast.success('Obligación de pago registrada');
       setNuevoPagoObs('');
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-checklist', tesisId] });
       qc.invalidateQueries({ queryKey: ['tesis-secretaria-cola-validacion'] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al registrar pago');
     }
   };
 
   const solicitudPagoEstudiante = async () => {
     const monto = Number(nuevoPagoMonto);
     if (!monto || monto <= 0) {
-      toast.error('Indique un monto válido');
+      toast.error('Indique un monto de pago válido');
       return;
     }
     try {
@@ -357,12 +389,12 @@ export default function TesisDetailPage() {
         monto,
         ...(nuevoPagoObs.trim() ? { observaciones: nuevoPagoObs.trim() } : {}),
       });
-      toast.success('Solicitud de pago registrada');
+      toast.success('Solicitud de pago registrada correctamente');
       setNuevoPagoObs('');
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-secretaria-cola-validacion'] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al registrar solicitud');
     }
   };
 
@@ -372,426 +404,665 @@ export default function TesisDetailPage() {
         validado,
         observaciones: docValidacionObs[documentoId]?.trim() || undefined,
       });
-      toast.success('Documento actualizado');
+      toast.success('Documento evaluado exitosamente');
       setDocValidacionObs((s) => ({ ...s, [documentoId]: '' }));
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-secretaria-cola-validacion'] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al evaluar documento');
     }
   };
 
   const cargarComprobante = async (pagoId: number) => {
     const url = comprobanteByPago[pagoId]?.trim();
     if (!url) {
-      toast.error('URL del comprobante requerida');
+      toast.error('Indique la URL del voucher o comprobante de pago');
       return;
     }
     try {
       await tesisApi.cargarComprobantePago(tesisId, pagoId, { comprobante_url: url });
-      toast.success('Comprobante cargado');
+      toast.success('Comprobante de pago enviado correctamente');
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-secretaria-cola-validacion'] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al subir comprobante');
     }
   };
 
   const verificarPago = async (pagoId: number, estado: string) => {
     try {
       await tesisApi.verificarPago(tesisId, pagoId, { estado });
-      toast.success('Pago actualizado');
+      toast.success('Estado del pago actualizado correctamente');
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-checklist', tesisId] });
       qc.invalidateQueries({ queryKey: ['tesis-secretaria-cola-validacion'] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al evaluar pago');
     }
   };
 
   const enviarObsJurado = async (juradoTesisId: number) => {
     const obs = juradoObsById[juradoTesisId]?.trim();
     if (!obs) {
-      toast.error('Escriba observaciones');
+      toast.error('Por favor, redacte observaciones válidas');
       return;
     }
     try {
       await tesisApi.juradoObservaciones(tesisId, juradoTesisId, { observaciones: obs });
-      toast.success('Observaciones enviadas al tesista');
+      toast.success('Observaciones enviadas exitosamente al tesista');
       setJuradoObsById((s) => ({ ...s, [juradoTesisId]: '' }));
       refetch();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al enviar observaciones');
     }
   };
 
   const marcarConforme = async (juradoTesisId: number) => {
     try {
       await tesisApi.juradoConforme(tesisId, juradoTesisId);
-      toast.success('Conformidad registrada');
+      toast.success('Conformidad registrada exitosamente');
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-checklist', tesisId] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al marcar conformidad');
     }
   };
 
   const validarExpedito = async () => {
     try {
       await tesisApi.validarExpedito(tesisId);
-      toast.success('Tesis marcada como expedito');
+      toast.success('Tesis calificada formalmente como expedito');
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-gate', tesisId] });
     } catch (e: any) {
       const msg = e?.response?.data?.message;
       const motivos = e?.response?.data?.motivos;
-      toast.error(msg || 'No se cumplen los requisitos');
+      toast.error(msg || 'La tesis aún no cumple con todos los requisitos');
       if (motivos?.length) console.warn(motivos);
     }
   };
 
   const programarSustentacion = async () => {
     if (!fechaSustentacion) {
-      toast.error('Seleccione fecha');
+      toast.error('Debe seleccionar una fecha para la sustentación');
       return;
     }
     try {
       await tesisApi.programarSustentacion(tesisId, new Date(fechaSustentacion).toISOString());
-      toast.success('Fecha programada');
+      toast.success('Fecha de sustentación agendada y guardada');
       setFechaSustentacion('');
       refetch();
       qc.invalidateQueries({ queryKey: ['tesis-gate', tesisId] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || 'Error');
+      toast.error(e?.response?.data?.message || 'Error al programar fecha');
     }
   };
 
   const puedeGestionarJurado = hasRole('admin') || hasRole('coordinador');
-  /** Crear obligación de pago, verificar comprobantes, validar documentos de la tesis */
   const puedeGestionAdministrativaPagosDocs =
     hasRole('admin') || hasRole('coordinador') || hasRole('secretaria');
   const puedeProgramar =
     hasRole('admin') || hasRole('coordinador') || hasRole('secretaria');
 
   return (
-    <div>
-      <Link href="/tesis" className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-6">
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Volver a tesis
-      </Link>
+    <div className="container max-w-7xl mx-auto px-4 py-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div>
+        <Link
+          href="/tesis"
+          className="inline-flex items-center text-sm font-semibold text-muted-foreground hover:text-primary transition-colors mb-4 group"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform" />
+          Volver a mis tesis
+        </Link>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Columna Principal Izquierda */}
         <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-2">
-                <CardTitle className="text-2xl">{tesis.titulo}</CardTitle>
-                <Badge className={estadoConfig.color}>{estadoConfig.label}</Badge>
+          {/* Ficha General de la Tesis */}
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/10 border-b p-6">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div className="space-y-1.5 flex-1">
+                  <div className="text-xs font-bold text-primary uppercase tracking-wider">Ficha de Tesis</div>
+                  <CardTitle className="text-2xl leading-tight font-extrabold text-foreground">
+                    {tesis.titulo}
+                  </CardTitle>
+                </div>
+                <Badge className={`${estadoConfig.color} border px-3 py-1 font-semibold text-xs rounded-full shrink-0 self-start`}>
+                  {estadoConfig.label}
+                </Badge>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6 space-y-6">
               {tesis.resumen && (
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Resumen</h3>
-                  <p className="text-gray-700">{tesis.resumen}</p>
+                <div className="space-y-2 bg-muted/20 p-4 rounded-xl border border-border/40">
+                  <h3 className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4 text-primary" />
+                    Resumen del proyecto
+                  </h3>
+                  <p className="text-gray-700 text-sm leading-relaxed italic">{tesis.resumen}</p>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center text-sm">
-                  <User className="h-4 w-4 mr-2 text-muted-foreground" />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex items-start gap-3 p-3 bg-card border rounded-lg hover:shadow-sm transition-shadow">
+                  <User className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-muted-foreground">Estudiante</p>
-                    <p className="font-medium">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Estudiante</p>
+                    <p className="font-bold text-sm text-foreground">
                       {tesis.estudiante?.usuario?.nombres} {tesis.estudiante?.usuario?.apellidos}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center text-sm">
-                  <User className="h-4 w-4 mr-2 text-muted-foreground" />
+
+                <div className="flex items-start gap-3 p-3 bg-card border rounded-lg hover:shadow-sm transition-shadow">
+                  <GraduationCap className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-muted-foreground">Asesor</p>
-                    <p className="font-medium">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Asesor Principal</p>
+                    <p className="font-bold text-sm text-foreground">
                       {tesis.asesor_principal?.usuario?.nombres} {tesis.asesor_principal?.usuario?.apellidos}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center text-sm">
-                  <School className="h-4 w-4 mr-2 text-muted-foreground" />
+
+                <div className="flex items-start gap-3 p-3 bg-card border rounded-lg hover:shadow-sm transition-shadow">
+                  <School className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-muted-foreground">Escuela</p>
-                    <p className="font-medium">{tesis.estudiante?.escuela?.nombre}</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Escuela</p>
+                    <p className="font-bold text-sm text-foreground">{tesis.estudiante?.escuela?.nombre}</p>
                   </div>
                 </div>
-                <div className="flex items-center text-sm">
-                  <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+
+                <div className="flex items-start gap-3 p-3 bg-card border rounded-lg hover:shadow-sm transition-shadow">
+                  <Calendar className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-muted-foreground">Fecha de inicio</p>
-                    <p className="font-medium">{tesis.fecha_inicio ? formatDate(tesis.fecha_inicio) : '—'}</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fecha de registro</p>
+                    <p className="font-bold text-sm text-foreground">
+                      {tesis.fecha_inicio ? formatDate(tesis.fecha_inicio) : 'Sin fecha registrada'}
+                    </p>
                   </div>
                 </div>
               </div>
+
               {tesis.fecha_recepcion_documentos && (
-                <p className="text-sm mt-4 text-muted-foreground">
-                  <strong>Fecha de recepción documentos:</strong>{' '}
-                  {formatDate(tesis.fecha_recepcion_documentos)}
-                </p>
+                <div className="flex items-center gap-2 p-3 bg-blue-50/50 text-blue-800 text-xs rounded-lg border border-blue-100">
+                  <CalendarClock className="h-4 w-4 text-blue-600 shrink-0" />
+                  <span>
+                    <strong>Recepción de documentos formalizada el:</strong>{' '}
+                    {formatDate(tesis.fecha_recepcion_documentos)}
+                  </span>
+                </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Documentos repositorio */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Documentos de la tesis</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Registre URLs de archivos (PDF/Drive). La primera tesis final estampa la fecha de recepción.
+          {/* Documentos repositorio de Tesis */}
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/10 border-b p-5">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Documentos de la tesis
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Expediente de archivos y borradores correspondientes. La primera subida del archivo en formato "Tesis final" establecerá la fecha de recepción formal de documentos.
               </p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {Array.isArray(tesis.documentos) && tesis.documentos.length > 0 && (
-                <ul className="text-sm space-y-3 border rounded-md p-3 bg-muted/30">
+            <CardContent className="p-6 space-y-4">
+              {Array.isArray(tesis.documentos) && tesis.documentos.length > 0 ? (
+                <div className="space-y-3">
                   {tesis.documentos.map((d: any) => (
-                    <li key={d.id} className="flex flex-col gap-2 border-b last:border-b-0 pb-3 last:pb-0">
-                      <div className="flex flex-wrap justify-between gap-2">
-                        <span className="capitalize font-medium">{d.tipo.replace(/_/g, ' ')} v{d.version}</span>
+                    <div
+                      key={d.id}
+                      className="border rounded-xl p-4 bg-card shadow-sm space-y-3 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                        <span className="capitalize font-bold text-sm text-foreground">
+                          {d.tipo.replace(/_/g, ' ')} <span className="text-xs text-muted-foreground">(v{d.version})</span>
+                        </span>
                         {d.validado ? (
-                          <Badge className="bg-green-100 text-green-900">Validado admin.</Badge>
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200 font-medium px-2 py-0.5 rounded-full">
+                            Validado Administrativamente
+                          </Badge>
                         ) : (
-                          <Badge variant="secondary">Pendiente validación</Badge>
+                          <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 font-medium px-2 py-0.5 rounded-full">
+                            Pendiente Validación
+                          </Badge>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 justify-between">
-                        <a href={d.archivo_url} className="text-primary underline truncate max-w-[240px]" target="_blank" rel="noreferrer">
-                          enlace
+
+                      <div className="flex flex-wrap items-center gap-4 justify-between text-xs text-muted-foreground">
+                        <a
+                          href={d.archivo_url}
+                          className="text-primary hover:underline inline-flex items-center gap-1 font-semibold"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Ver archivo adjunto
                         </a>
-                        <span className="text-muted-foreground whitespace-nowrap">{formatDate(d.subido_en)}</span>
+                        <span>Subido: {formatDate(d.subido_en)}</span>
                       </div>
+
                       {puedeGestionAdministrativaPagosDocs && !d.validado && (
-                        <div className="space-y-2 pt-2">
+                        <div className="space-y-2 pt-2 border-t mt-2">
+                          <Label className="text-xs font-semibold">Observación de Secretaría</Label>
                           <Textarea
-                            placeholder="Observación secretaría..."
+                            placeholder="Describa el motivo de la observación, correcciones necesarias o justificación..."
                             rows={2}
                             value={docValidacionObs[d.id] ?? ''}
                             onChange={(e) =>
                               setDocValidacionObs((s) => ({ ...s, [d.id]: e.target.value }))
                             }
+                            className="text-xs"
                           />
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-2 pt-1">
                             <Button
                               size="sm"
                               type="button"
                               onClick={() => validarDocumentoTesisStaff(d.id, true)}
+                              className="text-xs"
                             >
-                              Marcar documento válido
+                              Marcar como válido
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               type="button"
                               onClick={() => validarDocumentoTesisStaff(d.id, false)}
+                              className="text-xs border-rose-200 text-rose-700 hover:bg-rose-50"
                             >
-                              Observar
+                              Registrar Observación
                             </Button>
                           </div>
                         </div>
                       )}
-                      {puedeGestionAdministrativaPagosDocs && d.observaciones && (
-                        <p className="text-xs text-muted-foreground">{d.observaciones}</p>
+                      {d.observaciones && (
+                        <div className="text-xs p-2.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-100 flex items-start gap-2">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600" />
+                          <span>
+                            <strong>Observaciones:</strong> {d.observaciones}
+                          </span>
+                        </div>
                       )}
-                    </li>
+                    </div>
                   ))}
-                </ul>
-              )}
-              {esEstudianteTesista && (
-                <div className="flex flex-col sm:flex-row gap-2 items-end">
-                  <div className="flex-1 space-y-1 w-full">
-                    <Label>Tipo</Label>
-                    <Select
-                      className="w-full"
-                      value={docTipo}
-                      options={DOC_TIPOS}
-                      onChange={(e) => setDocTipo(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex-[2] space-y-1 w-full">
-                    <Label>URL del archivo</Label>
-                    <Input value={docUrl} onChange={(e) => setDocUrl(e.target.value)} placeholder="https://..." />
-                  </div>
-                  <Button type="button" onClick={subirDocumento}>
-                    Subir registro
-                  </Button>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Pagos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Pagos y comprobantes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {puedeGestionAdministrativaPagosDocs && (
-                <div className="flex flex-wrap gap-2 items-end border-b pb-4">
-                  <div>
-                    <Label>Concepto</Label>
-                    <Select
-                      className="w-44"
-                      value={nuevoPagoTipo}
-                      options={PAGO_TIPOS}
-                      onChange={(e) => setNuevoPagoTipo(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label>Monto (S/)</Label>
-                    <Input className="w-28" value={nuevoPagoMonto} onChange={(e) => setNuevoPagoMonto(e.target.value)} />
-                  </div>
-                  <div className="w-full md:w-auto md:min-w-[200px]">
-                    <Label>Nota (opcional)</Label>
-                    <Input value={nuevoPagoObs} onChange={(e) => setNuevoPagoObs(e.target.value)} placeholder="Referencia..." />
-                  </div>
-                  <Button type="button" variant="secondary" onClick={crearPago}>
-                    Registrar obligación de pago
-                  </Button>
-                </div>
-              )}
-              {esEstudianteTesista && !puedeGestionAdministrativaPagosDocs && (
-                <div className="flex flex-wrap gap-2 items-end border-b pb-4">
-                  <div>
-                    <Label>Solicitar pago — concepto</Label>
-                    <Select
-                      className="w-44"
-                      value={nuevoPagoTipo}
-                      options={PAGO_TIPOS}
-                      onChange={(e) => setNuevoPagoTipo(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label>Monto declarado (S/)</Label>
-                    <Input className="w-28" value={nuevoPagoMonto} onChange={(e) => setNuevoPagoMonto(e.target.value)} />
-                  </div>
-                  <div className="w-full md:w-auto md:flex-1 md:min-w-[220px]">
-                    <Label>Comentario (opcional)</Label>
-                    <Input value={nuevoPagoObs} onChange={(e) => setNuevoPagoObs(e.target.value)} placeholder="Ej. voucher bancario a nombre..." />
-                  </div>
-                  <Button type="button" onClick={solicitudPagoEstudiante}>
-                    Registrar solicitud de pago
-                  </Button>
-                  <p className="text-xs text-muted-foreground w-full">
-                    La secretaría registrará la obligación y podrá verificar su comprobante cuando lo cargue.
+              ) : (
+                <div className="text-center py-8 rounded-xl bg-muted/20 border border-dashed text-sm">
+                  <FileText className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="font-medium text-foreground">Sin documentos registrados</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cargue el primer archivo del proyecto en el panel a continuación para iniciar el expediente.
                   </p>
                 </div>
               )}
-              {Array.isArray(tesis.pagos) && tesis.pagos.length > 0 ? (
-                <ul className="space-y-3">
-                  {tesis.pagos.map((p: any) => (
-                    <li key={p.id} className="border rounded-lg p-3 text-sm">
-                      <div className="flex justify-between flex-wrap gap-2">
-                        <span className="font-medium capitalize">{p.tipo.replace(/_/g, ' ')}</span>
-                        <Badge variant="outline">S/ {p.monto}</Badge>
-                        <Badge>{p.estado}</Badge>
+
+              {/* Formulario condicional para cargar documentos */}
+              {tesis.estado === 'culminado' ? (
+                esEstudianteTesista ? (
+                  // Bloqueado para el estudiante
+                  <div className="flex items-start gap-3 p-4 rounded-xl border border-dashed border-green-200 bg-green-50/50 text-green-800 text-sm">
+                    <Lock className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Tesis Culminada e Histórica</p>
+                      <p className="text-xs text-green-700/90 mt-0.5">
+                        Esta tesis se encuentra en estado **culminado**. El expediente está oficialmente cerrado para la carga de nuevos documentos por parte del estudiante.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  // Habilitado para el Admin con aviso de Modo Admin
+                  (hasRole('admin') || hasRole('coordinador')) && (
+                    <div className="space-y-4 p-4 border border-dashed rounded-xl bg-amber-50/50 border-amber-200">
+                      <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
+                        <Lock className="h-4 w-4 text-amber-600" />
+                        <span>Modo Administrativo: Carga permitida por Rol Administrativo (Tesis Culminada)</span>
                       </div>
-                      {esEstudianteTesista && (p.estado === 'pendiente' || p.estado === 'comprobante_cargado') && (
-                        <div className="mt-2 flex gap-2">
-                          <Input
-                            placeholder="URL comprobante"
-                            value={comprobanteByPago[p.id] ?? ''}
-                            onChange={(e) =>
-                              setComprobanteByPago((s) => ({ ...s, [p.id]: e.target.value }))
-                            }
+                      <div className="flex flex-col sm:flex-row gap-3 items-end">
+                        <div className="flex-1 space-y-1 w-full">
+                          <Label className="text-xs font-semibold">Tipo de documento</Label>
+                          <Select
+                            className="w-full"
+                            value={docTipo}
+                            options={DOC_TIPOS}
+                            onChange={(e) => setDocTipo(e.target.value)}
                           />
-                          <Button size="sm" type="button" onClick={() => cargarComprobante(p.id)}>
-                            Cargar voucher
-                          </Button>
                         </div>
-                      )}
-                      {puedeGestionAdministrativaPagosDocs && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="default"
-                            type="button"
-                            disabled={
-                              (p.estado === 'pendiente' && !p.comprobante_url) ||
-                              p.estado === 'verificado'
-                            }
-                            onClick={() => verificarPago(p.id, 'verificado')}
-                          >
-                            Marcar pagado
-                          </Button>
-                          <Button size="sm" variant="outline" type="button" onClick={() => verificarPago(p.id, 'rechazado')}>
-                            Rechazar
-                          </Button>
+                        <div className="flex-[2] space-y-1 w-full">
+                          <Label className="text-xs font-semibold">URL del archivo (Drive / PDF)</Label>
+                          <Input
+                            value={docUrl}
+                            onChange={(e) => setDocUrl(e.target.value)}
+                            placeholder="https://drive.google.com/..."
+                            className="text-sm"
+                          />
                         </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                        <Button type="button" onClick={subirDocumento} className="w-full sm:w-auto shadow-sm">
+                          Cargar
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                )
               ) : (
-                <p className="text-sm text-muted-foreground">Sin pagos registrados.</p>
+                // Si la tesis no está culminada, estudiante y admin pueden subir
+                (esEstudianteTesista || hasRole('admin') || hasRole('coordinador')) && (
+                  <div className="flex flex-col sm:flex-row gap-3 items-end bg-muted/20 p-4 rounded-xl border border-border/40">
+                    <div className="flex-1 space-y-1.5 w-full">
+                      <Label className="text-xs font-bold text-foreground">Tipo de Documento</Label>
+                      <Select
+                        className="w-full"
+                        value={docTipo}
+                        options={DOC_TIPOS}
+                        onChange={(e) => setDocTipo(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-[2] space-y-1.5 w-full">
+                      <Label className="text-xs font-bold text-foreground">Enlace o URL del Archivo (Drive/PDF)</Label>
+                      <Input
+                        value={docUrl}
+                        onChange={(e) => setDocUrl(e.target.value)}
+                        placeholder="https://ejemplo.com/archivo.pdf"
+                        className="text-sm"
+                      />
+                    </div>
+                    <Button type="button" onClick={subirDocumento} className="w-full sm:w-auto shadow-sm">
+                      Subir registro
+                    </Button>
+                  </div>
+                )
               )}
             </CardContent>
           </Card>
 
-          {/* Jurados */}
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center flex-wrap gap-2">
-                <CardTitle>Jurado ({juradoCount}/3)</CardTitle>
+          {/* Pagos y Comprobantes */}
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/10 border-b p-5">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CircleDollarSign className="h-5 w-5 text-primary" />
+                Pagos y comprobantes
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              {puedeGestionAdministrativaPagosDocs && (
+                <div className="space-y-4 border-b pb-6">
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Registrar Obligación de Pago (Secretaría)
+                  </div>
+                  <div className="flex flex-wrap gap-3 items-end bg-muted/20 p-4 rounded-xl border border-border/40">
+                    <div className="flex-1 min-w-[150px]">
+                      <Label className="text-xs font-semibold">Concepto</Label>
+                      <Select
+                        className="w-full"
+                        value={nuevoPagoTipo}
+                        options={PAGO_TIPOS}
+                        onChange={(e) => setNuevoPagoTipo(e.target.value)}
+                      />
+                    </div>
+                    <div className="w-28">
+                      <Label className="text-xs font-semibold">Monto (S/)</Label>
+                      <Input
+                        className="text-sm"
+                        value={nuevoPagoMonto}
+                        onChange={(e) => setNuevoPagoMonto(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-[2] min-w-[200px]">
+                      <Label className="text-xs font-semibold">Nota o referencia</Label>
+                      <Input
+                        value={nuevoPagoObs}
+                        onChange={(e) => setNuevoPagoObs(e.target.value)}
+                        placeholder="Ej. Pago Turnitin - 1ra oportunidad..."
+                        className="text-sm"
+                      />
+                    </div>
+                    <Button type="button" variant="secondary" onClick={crearPago} className="shadow-sm">
+                      Registrar obligación
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {esEstudianteTesista && !puedeGestionAdministrativaPagosDocs && tesis.estado !== 'culminado' && (
+                <div className="space-y-4 border-b pb-6">
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Registrar Solicitud de Pago
+                  </div>
+                  <div className="flex flex-wrap gap-3 items-end bg-muted/20 p-4 rounded-xl border border-border/40">
+                    <div className="flex-1 min-w-[150px]">
+                      <Label className="text-xs font-semibold">Concepto a solicitar</Label>
+                      <Select
+                        className="w-full"
+                        value={nuevoPagoTipo}
+                        options={PAGO_TIPOS}
+                        onChange={(e) => setNuevoPagoTipo(e.target.value)}
+                      />
+                    </div>
+                    <div className="w-28">
+                      <Label className="text-xs font-semibold">Monto (S/)</Label>
+                      <Input
+                        className="text-sm"
+                        value={nuevoPagoMonto}
+                        onChange={(e) => setNuevoPagoMonto(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex-[2] min-w-[200px]">
+                      <Label className="text-xs font-semibold">Comentario opcional</Label>
+                      <Input
+                        value={nuevoPagoObs}
+                        onChange={(e) => setNuevoPagoObs(e.target.value)}
+                        placeholder="Escriba indicaciones o notas..."
+                        className="text-sm"
+                      />
+                    </div>
+                    <Button type="button" onClick={solicitudPagoEstudiante} className="shadow-sm">
+                      Solicitar pago
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    La secretaría revisará su solicitud para habilitarle formalmente la obligación y permitir la carga de comprobantes.
+                  </p>
+                </div>
+              )}
+
+              {Array.isArray(tesis.pagos) && tesis.pagos.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                    Historial y Estado de Pagos
+                  </div>
+                  {tesis.pagos.map((p: any) => {
+                    const cfg = PAGO_ESTADO_CONFIG[p.estado] || {
+                      color: 'bg-muted text-muted-foreground border-border',
+                      label: String(p.estado),
+                    };
+
+                    return (
+                      <div
+                        key={p.id}
+                        className="border rounded-xl p-4 bg-card shadow-sm space-y-3 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex justify-between items-center flex-wrap gap-2 border-b pb-2">
+                          <span className="font-bold text-sm text-foreground">
+                            {PAGO_LABELS[p.tipo] || String(p.tipo).replace(/_/g, ' ')}
+                          </span>
+                          <div className="flex gap-2">
+                            <Badge variant="outline" className="font-bold text-sm bg-muted/40 border">
+                              S/ {Number(p.monto).toFixed(2)}
+                            </Badge>
+                            <Badge variant="outline" className={`${cfg.color} font-medium px-2 py-0.5 rounded-full border`}>
+                              {cfg.label}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {p.comprobante_url && (
+                          <div className="text-xs font-medium text-muted-foreground">
+                            <a
+                              href={p.comprobante_url}
+                              className="text-primary hover:underline inline-flex items-center gap-1"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Ver comprobante cargado
+                            </a>
+                            {p.comprobante_subido_en && (
+                              <span className="ml-2">({formatDate(p.comprobante_subido_en)})</span>
+                            )}
+                          </div>
+                        )}
+
+                        {esEstudianteTesista && tesis.estado !== 'culminado' && (p.estado === 'pendiente' || p.estado === 'comprobante_cargado' || p.estado === 'rechazado') && (
+                          <div className="pt-2 border-t">
+                            <Label className="text-xs font-semibold block mb-1">Cargar comprobante de pago</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="URL del comprobante o captura en Drive"
+                                value={comprobanteByPago[p.id] ?? ''}
+                                onChange={(e) =>
+                                  setComprobanteByPago((s) => ({ ...s, [p.id]: e.target.value }))
+                                }
+                                className="text-xs flex-1"
+                              />
+                              <Button size="sm" type="button" onClick={() => cargarComprobante(p.id)} className="text-xs">
+                                Enviar comprobante
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {puedeGestionAdministrativaPagosDocs && (
+                          <div className="pt-2 border-t flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              type="button"
+                              disabled={(!p.comprobante_url && p.estado === 'pendiente') || p.estado === 'verificado'}
+                              onClick={() => verificarPago(p.id, 'verificado')}
+                              className="text-xs"
+                            >
+                              Marcar como verificado
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              type="button"
+                              disabled={p.estado === 'verificado'}
+                              onClick={() => verificarPago(p.id, 'rechazado')}
+                              className="text-xs text-rose-700 border-rose-200 hover:bg-rose-50"
+                            >
+                              Rechazar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 rounded-xl bg-muted/20 border border-dashed text-sm">
+                  <CircleDollarSign className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="font-medium text-foreground">Sin registros de pago vinculados</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Una vez registrada una obligación de pago, aparecerán los controles para cargar el voucher.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Jurados y Observaciones */}
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/10 border-b p-5">
+              <div className="flex justify-between items-center flex-wrap gap-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  Miembros del Jurado ({juradoCount}/3)
+                </CardTitle>
                 {puedeGestionarJurado && (
-                  <Button size="sm" variant="secondary" onClick={() => setOpenAssignModal(true)}>
-                    Asignar miembro
+                  <Button size="sm" variant="secondary" onClick={() => setOpenAssignModal(true)} className="shadow-sm">
+                    Asignar jurado
                   </Button>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">
-                Con 3 jurados asignados puede iniciarse la revisión formal. Cada jurado registra observaciones o conformidad.
+              <p className="text-xs text-muted-foreground mt-1">
+                Con 3 miembros del jurado asignados se habilita la revisión formal de la tesis. Cada jurado emitirá observaciones o registrará su conformidad.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               {Array.isArray(tesis.jurados) && tesis.jurados.length > 0 ? (
                 <div className="space-y-4">
                   {tesis.jurados.map((jurado: any) => {
                     const rev = jurado.revisiones?.[0];
                     const esMiJurado = user?.id === jurado.asesor?.usuario?.id && hasRole('asesor');
+
+                    let statusBadge = (
+                      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 rounded-full font-medium">
+                        Revisión pendiente
+                      </Badge>
+                    );
+                    if (rev) {
+                      statusBadge = rev.conforme ? (
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200 rounded-full font-medium">
+                          Conforme
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-orange-50 text-orange-800 border-orange-200 rounded-full font-medium">
+                          Con observaciones
+                        </Badge>
+                      );
+                    }
+
                     return (
-                      <div key={jurado.id} className="border rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between flex-wrap gap-2">
+                      <div key={jurado.id} className="border rounded-xl p-4 bg-card shadow-sm space-y-3 hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start flex-wrap gap-2 border-b pb-2">
                           <div>
-                            <p className="font-medium">
+                            <p className="font-bold text-sm text-foreground">
                               {jurado.asesor.usuario.nombres} {jurado.asesor.usuario.apellidos}
                             </p>
-                            <p className="text-xs text-muted-foreground capitalize">{jurado.rol}</p>
+                            <p className="text-xs text-muted-foreground font-semibold capitalize mt-0.5">
+                              Rol: {jurado.rol}
+                            </p>
                           </div>
-                          {rev && (
-                            <Badge variant="outline">
-                              {rev.conforme ? 'Conforme' : rev.estado}
-                            </Badge>
-                          )}
+                          {statusBadge}
                         </div>
+
                         {rev?.observaciones && (
-                          <p className="text-sm bg-amber-50 p-2 rounded">{rev.observaciones}</p>
+                          <div className="text-xs p-3 rounded-lg bg-amber-50 text-amber-800 border border-amber-100/50 italic">
+                            <strong>Observaciones del jurado:</strong> {rev.observaciones}
+                          </div>
                         )}
+
                         {esMiJurado && juradoCount >= 3 && (
-                          <div className="space-y-2 pt-2 border-t">
+                          <div className="space-y-3 pt-3 border-t">
+                            <Label className="text-xs font-bold block">Registrar Evaluación (Rol: Jurado)</Label>
                             <Textarea
-                              placeholder="Observaciones para el tesista"
+                              placeholder="Redacte observaciones detalladas si decide observar la tesis..."
                               value={juradoObsById[jurado.id] ?? ''}
                               onChange={(e) =>
                                 setJuradoObsById((s) => ({ ...s, [jurado.id]: e.target.value }))
                               }
                               rows={3}
+                              className="text-xs"
                             />
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
                                 type="button"
                                 onClick={() => enviarObsJurado(jurado.id)}
+                                className="text-xs"
                               >
-                                Enviar observaciones
+                                Enviar Observaciones
                               </Button>
-                              <Button size="sm" variant="secondary" type="button" onClick={() => marcarConforme(jurado.id)}>
-                                Marcar conforme
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                type="button"
+                                onClick={() => marcarConforme(jurado.id)}
+                                className="text-xs"
+                              >
+                                Otorgar Conformidad
                               </Button>
                             </div>
                           </div>
@@ -801,136 +1072,212 @@ export default function TesisDetailPage() {
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Aún no hay jurados designados.</p>
+                <div className="text-center py-8 rounded-xl bg-muted/20 border border-dashed text-sm">
+                  <Users className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="font-medium text-foreground">No hay jurados designados</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    El coordinador o administrador asignará los tres jurados necesarios para habilitar la etapa de evaluación formal.
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Cierre / checklist */}
+          {/* Validación final (cierre) */}
           {(hasRole('admin') || hasRole('coordinador') || hasRole('secretaria')) && checklist && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Validación final (cierre)</CardTitle>
+            <Card className="border-border/50 shadow-sm overflow-hidden">
+              <CardHeader className="bg-muted/10 border-b p-5">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                  Validación final (cierre)
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>Prácticas OK: {checklist.detalle?.practicas_ok ? 'Sí' : 'No'}</div>
-                  <div>Jurado OK: {checklist.detalle?.jurado_ok ? 'Sí' : 'No'}</div>
-                  <div>Documento final: {checklist.detalle?.documento_final_ok ? 'Sí' : 'No'}</div>
-                  <div>Pagos verificados: {checklist.detalle?.pagos_ok ? 'Sí' : 'No'}</div>
+              <CardContent className="p-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2.5 p-3 rounded-lg bg-muted/40 border border-border/50 text-xs">
+                    {checklist.detalle?.practicas_ok ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-rose-600" />
+                    )}
+                    <span className="font-medium text-foreground">Prácticas profesionales aprobadas</span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 p-3 rounded-lg bg-muted/40 border border-border/50 text-xs">
+                    {checklist.detalle?.jurado_ok ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-rose-600" />
+                    )}
+                    <span className="font-medium text-foreground">Conformidad de jurados (3/3)</span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 p-3 rounded-lg bg-muted/40 border border-border/50 text-xs">
+                    {checklist.detalle?.documento_final_ok ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-rose-600" />
+                    )}
+                    <span className="font-medium text-foreground">Tesis final validada por secretaría</span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 p-3 rounded-lg bg-muted/40 border border-border/50 text-xs">
+                    {checklist.detalle?.pagos_ok ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-rose-600" />
+                    )}
+                    <span className="font-medium text-foreground">Obligaciones de pago canceladas</span>
+                  </div>
                 </div>
+
                 {!checklist.completo && checklist.motivos?.length > 0 && (
-                  <ul className="list-disc pl-5 text-amber-800">
-                    {checklist.motivos.map((m: string, i: number) => (
-                      <li key={i}>{m}</li>
-                    ))}
-                  </ul>
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-xs space-y-1.5 text-amber-900">
+                    <span className="font-bold block">Requisitos pendientes de subsanación:</span>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {checklist.motivos.map((m: string, i: number) => (
+                        <li key={i}>{m}</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
+
                 {(hasRole('admin') || hasRole('coordinador')) && (
-                  <Button type="button" disabled={tesis.estado === 'expedito'} onClick={validarExpedito}>
-                    Marcar tesis como expedito
-                  </Button>
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      disabled={tesis.estado === 'expedito'}
+                      onClick={validarExpedito}
+                      className="w-full sm:w-auto shadow-sm"
+                    >
+                      Declarar tesis como Expedito
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
           )}
 
+          {/* Avances */}
           {Array.isArray(tesis.avances) && tesis.avances.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Avances</CardTitle>
+            <Card className="border-border/50 shadow-sm overflow-hidden">
+              <CardHeader className="bg-muted/10 border-b p-5">
+                <CardTitle className="text-lg">Avances del proyecto</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-6">
                 <div className="space-y-4">
-                  {tesis.avances.map((avance: any) => (
-                    <div key={avance.id} className="border rounded-lg p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="font-medium capitalize">{avance.tipo}</p>
-                          <p className="text-sm text-gray-600 mt-1">{avance.descripcion}</p>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Entregado: {formatDate(avance.fecha_entrega)}
-                          </p>
+                  {tesis.avances.map((avance: any) => {
+                    let badgeClass = 'bg-yellow-100 text-yellow-800';
+                    if (avance.estado === 'aprobado') {
+                      badgeClass = 'bg-green-100 text-green-800';
+                    } else if (avance.estado === 'observado') {
+                      badgeClass = 'bg-red-100 text-red-800';
+                    }
+
+                    return (
+                      <div
+                        key={avance.id}
+                        className="border rounded-xl p-4 bg-card shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start justify-between gap-4 border-b pb-2 mb-2">
+                          <div className="flex-1">
+                            <p className="font-bold text-sm text-foreground capitalize">{avance.tipo}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Entregado: {formatDate(avance.fecha_entrega)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge className={`${badgeClass} font-semibold rounded-full px-2 py-0.5 text-xs border-0`}>
+                              {avance.estado}
+                            </Badge>
+                            {(hasRole('admin') || hasRole('asesor') || hasRole('coordinador')) && (
+                              <div className="flex gap-1">
+                                <Button size="sm" variant="outline" onClick={() => openReviewModal(avance)} className="h-8 w-8 p-0">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={() => setEditingAvance(avance)} className="h-8 w-8 p-0">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            className={
-                              avance.estado === 'aprobado'
-                                ? 'bg-green-100 text-green-800'
-                                : avance.estado === 'observado'
-                                  ? 'bg-red-100 text-red-800'
-                                  : 'bg-yellow-100 text-yellow-800'
-                            }
-                          >
-                            {avance.estado}
-                          </Badge>
-                          {(hasRole('admin') || hasRole('asesor') || hasRole('coordinador')) && (
-                            <>
-                              <Button size="sm" variant="outline" onClick={() => openReviewModal(avance)}>
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => setEditingAvance(avance)}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
+
+                        <p className="text-gray-700 text-xs leading-relaxed">{avance.descripcion}</p>
+
+                        {avance.observaciones && (
+                          <div className="text-xs p-2.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-100 mt-2 flex items-start gap-2">
+                            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-rose-600" />
+                            <span>
+                              <strong>Observaciones:</strong> {avance.observaciones}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      {avance.observaciones && (
-                        <p className="text-sm text-red-600 mt-2 bg-red-50 p-2 rounded">{avance.observaciones}</p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
           )}
         </div>
 
+        {/* Columna Derecha de Acción (Sidebar) */}
         <div className="space-y-6">
+          {/* Acta de Sustentación */}
           {tesis.acta && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Star className="h-5 w-5 mr-2 text-yellow-500" />
+            <Card className="border-border/50 shadow-sm overflow-hidden bg-gradient-to-br from-amber-50/20 to-card">
+              <CardHeader className="bg-amber-500/10 border-b border-amber-200/50 p-5">
+                <CardTitle className="flex items-center text-amber-800 text-lg">
+                  <Star className="h-5 w-5 mr-2 text-amber-500 fill-amber-500" />
                   Acta de sustentación
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="p-6 space-y-4 text-sm">
                 <div>
-                  <p className="text-sm text-muted-foreground">Fecha</p>
-                  <p className="font-medium">{formatDate(tesis.acta.fecha)}</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fecha de registro</p>
+                  <p className="font-bold text-foreground mt-0.5">{formatDate(tesis.acta.fecha)}</p>
                 </div>
                 {tesis.acta.lugar && (
                   <div>
-                    <p className="text-sm text-muted-foreground">Lugar</p>
-                    <p className="font-medium">{tesis.acta.lugar}</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Lugar</p>
+                    <p className="font-bold text-foreground mt-0.5">{tesis.acta.lugar}</p>
                   </div>
                 )}
-                <div>
-                  <p className="text-sm text-muted-foreground">Nota final</p>
-                  <p className="text-3xl font-bold text-primary">{tesis.acta.nota_final}</p>
+                <div className="pt-2 border-t">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nota final</p>
+                  <p className="text-4xl font-extrabold text-primary mt-1">{tesis.acta.nota_final}</p>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          <Card>
+          {/* Sustentación Habilitación */}
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/10 border-b p-5">
+              <CardTitle className="text-sm font-bold">Estado de Sustentación</CardTitle>
+            </CardHeader>
             <CardContent className="p-6 space-y-4">
-              <h3 className="font-semibold">Sustentación</h3>
               {gate && (
                 <div
-                  className={`text-sm p-3 rounded-md ${gate.permitido ? 'bg-green-50 text-green-900' : 'bg-amber-50 text-amber-900'}`}
+                  className={`text-xs p-3.5 rounded-xl border ${
+                    gate.permitido
+                      ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                      : 'bg-amber-50 text-amber-900 border-amber-200'
+                  }`}
                 >
                   {gate.permitido ? (
-                    <p>Puede programarse la fecha (prácticas aprobadas y tesis expedito).</p>
+                    <p className="font-semibold">Apto para programar: Se cumplen todos los requisitos del flujo.</p>
                   ) : (
-                    <div>
-                      <p className="font-medium flex items-center gap-2">
-                        <Lock className="h-4 w-4" />
-                        Aún no habilitado
+                    <div className="space-y-1.5">
+                      <p className="font-bold flex items-center gap-1.5">
+                        <Lock className="h-3.5 w-3.5 text-amber-600" />
+                        Programación bloqueada
                       </p>
-                      <ul className="list-disc pl-5 mt-1">
+                      <span className="text-muted-foreground text-[11px] block leading-tight">
+                        Requisitos pendientes de verificación administrativa:
+                      </span>
+                      <ul className="list-disc pl-4 space-y-1 text-[11px] text-amber-800">
                         {gate.motivos?.map((m: string, i: number) => (
                           <li key={i}>{m}</li>
                         ))}
@@ -939,70 +1286,93 @@ export default function TesisDetailPage() {
                   )}
                 </div>
               )}
+
               {puedeProgramar && (
-                <div className="space-y-2">
-                  <Label>Fecha de sustentación</Label>
-                  <Input
-                    type="date"
-                    value={fechaSustentacion}
-                    onChange={(e) => setFechaSustentacion(e.target.value)}
-                    disabled={!gate?.permitido}
-                  />
-                  <Button className="w-full" disabled={!gate?.permitido} onClick={programarSustentacion}>
-                    Programar fecha
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Seleccionar fecha de sustentación</Label>
+                    <Input
+                      type="date"
+                      value={fechaSustentacion}
+                      onChange={(e) => setFechaSustentacion(e.target.value)}
+                      disabled={!gate?.permitido}
+                      className="text-xs"
+                    />
+                  </div>
+                  <Button className="w-full text-xs shadow-sm" disabled={!gate?.permitido} onClick={programarSustentacion}>
+                    Programar sustentación
                   </Button>
                 </div>
               )}
+
               {esEstudianteTesista && (
-                <p className="text-xs text-muted-foreground">
-                  La solicitud de fecha queda bloqueada hasta que prácticas estén aprobadas y la tesis en estado expedito.
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  La programación formal de la fecha del evento queda sujeta a que cuente con sus prácticas aprobadas y la tesis esté validada en estado expedito.
                 </p>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          {/* Acciones Rápidas */}
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/10 border-b p-5">
+              <CardTitle className="text-sm font-bold">Acciones disponibles</CardTitle>
+            </CardHeader>
             <CardContent className="p-6">
-              <h3 className="font-semibold mb-4">Acciones</h3>
               <div className="space-y-2">
-                {hasRole('estudiante') && (
+                {hasRole('estudiante') && tesis.estado !== 'culminado' && (
                   <Link href={`/tesis/${tesisId}/avances`} className="w-full block">
-                    <Button className="w-full" variant="secondary">
-                      Registrar avance
+                    <Button className="w-full text-xs" variant="secondary">
+                      <PlusCircle className="h-4 w-4 mr-2" />
+                      Registrar nuevo avance
                     </Button>
                   </Link>
                 )}
+
                 <Button
-                  className="w-full"
+                  className="w-full text-xs"
                   variant="outline"
                   onClick={handleVerDocumento}
                   disabled={isViewingPdf || isDownloadingPdf}
                 >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Ver documento (reporte)
+                  {isViewingPdf ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4 mr-2" />
+                  )}
+                  Ver documento reporte
                 </Button>
+
                 <Button
-                  className="w-full"
+                  className="w-full text-xs"
                   variant="outline"
                   onClick={handleDescargarInforme}
                   disabled={isViewingPdf || isDownloadingPdf}
                 >
-                  Descargar informe
+                  {isDownloadingPdf ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4 mr-2" />
+                  )}
+                  Descargar informe pdf
                 </Button>
+
                 {puedeGestionarJurado && (
-                  <Button className="w-full" variant="secondary" onClick={() => setOpenAssignModal(true)}>
-                    Asignar jurado
+                  <Button className="w-full text-xs" variant="secondary" onClick={() => setOpenAssignModal(true)}>
+                    <Users className="h-4 w-4 mr-2" />
+                    Asignar nuevo jurado
                   </Button>
                 )}
-                {puedeGestionarJurado &&
-                  tesis.estado === 'sustentacion_programada' &&
-                  !tesis.acta && (
-                    <Button className="w-full" variant="secondary" onClick={() => setOpenActaModal(true)}>
-                      Crear acta de sustentación
-                    </Button>
-                  )}
+
+                {puedeGestionarJurado && tesis.estado === 'sustentacion_programada' && !tesis.acta && (
+                  <Button className="w-full text-xs" variant="secondary" onClick={() => setOpenActaModal(true)}>
+                    <Star className="h-4 w-4 mr-2" />
+                    Generar acta de sustentación
+                  </Button>
+                )}
+
                 {tesis.acta?.archivo_acta_pdf && (
-                  <Button className="w-full" variant="outline" onClick={handleDownloadActaPdf}>
+                  <Button className="w-full text-xs" variant="outline" onClick={handleDownloadActaPdf}>
                     Descargar acta PDF
                   </Button>
                 )}
@@ -1012,40 +1382,53 @@ export default function TesisDetailPage() {
         </div>
       </div>
 
+      {/* Dialogs / Modals */}
       <Dialog open={!!reviewingAvance} onClose={closeReviewModal} title="Revisar avance">
         {reviewingAvance && (
-          <div className="space-y-4">
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h4 className="font-medium capitalize">{reviewingAvance.tipo}</h4>
-              <p className="text-sm text-gray-600 mt-1">{reviewingAvance.descripcion}</p>
+          <div className="space-y-4 pt-2">
+            <div className="bg-muted/40 p-4 rounded-xl border">
+              <h4 className="font-bold text-sm text-foreground capitalize">{reviewingAvance.type || reviewingAvance.tipo}</h4>
+              <p className="text-xs text-muted-foreground mt-1">{reviewingAvance.descripcion}</p>
             </div>
-            <Textarea
-              value={reviewObservaciones}
-              onChange={(e) => setReviewObservaciones(e.target.value)}
-              rows={4}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={closeReviewModal} disabled={isReviewing}>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Observaciones de la evaluación</Label>
+              <Textarea
+                placeholder="Escriba comentarios, objeciones o detalles sobre la aprobación..."
+                value={reviewObservaciones}
+                onChange={(e) => setReviewObservaciones(e.target.value)}
+                rows={4}
+                className="text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={closeReviewModal} disabled={isReviewing} className="text-xs">
                 Cancelar
               </Button>
-              <Button variant="destructive" onClick={() => handleRevisarAvance(reviewingAvance.id, 'observado')} disabled={isReviewing}>
-                <XCircle className="h-4 w-4 mr-2" />
-                Rechazar
+              <Button
+                variant="destructive"
+                onClick={() => handleRevisarAvance(reviewingAvance.id, 'observado')}
+                disabled={isReviewing}
+                className="text-xs bg-rose-600 hover:bg-rose-700"
+              >
+                <XCircle className="h-4 w-4 mr-1.5" />
+                Registrar Observado
               </Button>
-              <Button onClick={() => handleRevisarAvance(reviewingAvance.id, 'aprobado')} disabled={isReviewing}>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Aprobar
+              <Button onClick={() => handleRevisarAvance(reviewingAvance.id, 'aprobado')} disabled={isReviewing} className="text-xs">
+                <CheckCircle className="h-4 w-4 mr-1.5" />
+                Aprobar Avance
               </Button>
             </div>
           </div>
         )}
       </Dialog>
 
-      <Dialog open={openAssignModal} onClose={() => setOpenAssignModal(false)} title="Asignar jurado">
-        <form onSubmit={handleAssignJurado} className="space-y-4">
-          <p className="text-sm text-muted-foreground">Asigne 3 docentes con roles distintos (presidente, secretario, vocal).</p>
-          <div className="space-y-2">
-            <Label>Asesor / docente</Label>
+      <Dialog open={openAssignModal} onClose={() => setOpenAssignModal(false)} title="Asignar jurado a la tesis">
+        <form onSubmit={handleAssignJurado} className="space-y-4 pt-2">
+          <p className="text-xs text-muted-foreground">
+            Debe designar tres docentes con roles diferenciados (presidente, secretario, vocal) para componer el jurado.
+          </p>
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Seleccionar docente</Label>
             <Select
               className="w-full"
               value={selectedAsesorId ? String(selectedAsesorId) : ''}
@@ -1055,18 +1438,18 @@ export default function TesisDetailPage() {
                       value: String(a.id),
                       label: `${a.usuario.nombres} ${a.usuario.apellidos}`,
                     }))
-                  : [{ value: '', label: 'No hay disponibles' }]
+                  : [{ value: '', label: 'Sin asesores disponibles en este momento' }]
               }
               onChange={(e) => setSelectedAsesorId(e.target.value ? Number(e.target.value) : null)}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Rol</Label>
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Rol del jurado</Label>
             <Select
               className="w-full"
               value={selectedJuradoRole}
               options={[
-                { value: '', label: 'Elegir' },
+                { value: '', label: 'Seleccionar rol...' },
                 { value: 'presidente', label: 'Presidente' },
                 { value: 'secretario', label: 'Secretario' },
                 { value: 'vocal', label: 'Vocal' },
@@ -1074,40 +1457,57 @@ export default function TesisDetailPage() {
               onChange={(e) => setSelectedJuradoRole(e.target.value)}
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" type="button" onClick={() => setOpenAssignModal(false)} disabled={isAssigningJurado}>
-              Cerrar
-            </Button>
-            <Button type="submit" disabled={isAssigningJurado}>
-              {isAssigningJurado ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Asignar'}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
-
-      <Dialog open={openActaModal} onClose={() => setOpenActaModal(false)} title="Acta de sustentación">
-        <form onSubmit={handleCrearActa} className="space-y-4">
-          <Input type="date" value={actaFecha} onChange={(e) => setActaFecha(e.target.value)} />
-          <Input placeholder="Lugar" value={actaLugar} onChange={(e) => setActaLugar(e.target.value)} />
-          <Input
-            type="number"
-            placeholder="Nota"
-            value={actaNota}
-            onChange={(e) => setActaNota(e.target.value ? Number(e.target.value) : '')}
-          />
-          <Input type="file" accept="application/pdf" onChange={(e) => setActaFile(e.target.files?.[0] || null)} />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" type="button" onClick={() => setOpenActaModal(false)} disabled={isCreatingActa}>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" type="button" onClick={() => setOpenAssignModal(false)} disabled={isAssigningJurado} className="text-xs">
               Cancelar
             </Button>
-            <Button type="submit" disabled={isCreatingActa}>
-              {isCreatingActa ? 'Guardando...' : 'Guardar'}
+            <Button type="submit" disabled={isAssigningJurado} className="text-xs shadow-sm">
+              {isAssigningJurado ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Designar miembro
             </Button>
           </div>
         </form>
       </Dialog>
 
-      <Dialog open={!!editingAvance} onClose={() => setEditingAvance(null)} title="Editar avance">
+      <Dialog open={openActaModal} onClose={() => setOpenActaModal(false)} title="Acta de sustentación formal">
+        <form onSubmit={handleCrearActa} className="space-y-4 pt-2">
+          <p className="text-xs text-muted-foreground">
+            Complete los datos finales del evento de sustentación y cargue el documento probatorio en PDF.
+          </p>
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Fecha del evento</Label>
+            <Input type="date" value={actaFecha} onChange={(e) => setActaFecha(e.target.value)} className="text-xs" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Lugar de sustentación</Label>
+            <Input placeholder="Aula / Auditorio / Google Meet Link..." value={actaLugar} onChange={(e) => setActaLugar(e.target.value)} className="text-xs" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Calificación o Nota final obtenida</Label>
+            <Input
+              type="number"
+              placeholder="Nota final (0 - 20)"
+              value={actaNota}
+              onChange={(e) => setActaNota(e.target.value ? Number(e.target.value) : '')}
+              className="text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Documento digitalizado del Acta (PDF)</Label>
+            <Input type="file" accept="application/pdf" onChange={(e) => setActaFile(e.target.files?.[0] || null)} className="text-xs" />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" type="button" onClick={() => setOpenActaModal(false)} disabled={isCreatingActa} className="text-xs">
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isCreatingActa} className="text-xs shadow-sm">
+              {isCreatingActa ? 'Guardando...' : 'Guardar y registrar'}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog open={!!editingAvance} onClose={() => setEditingAvance(null)} title="Modificar registro de avance">
         {editingAvance && (
           <AvanceEditForm
             initialData={{

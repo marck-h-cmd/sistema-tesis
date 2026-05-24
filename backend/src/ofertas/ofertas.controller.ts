@@ -105,7 +105,7 @@ export class OfertasController {
 
   // Postulaciones
   @Get(':id/postulaciones')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
   async getPostulaciones(@Param('id', ParseIntPipe) ofertaId: number) {
     const postulaciones = await this.postulacionesService.findAll();
     return { data: postulaciones };

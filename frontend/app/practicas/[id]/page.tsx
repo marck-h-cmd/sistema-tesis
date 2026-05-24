@@ -49,6 +49,8 @@ export default function OfertaDetailPage() {
     (p: any) => p.estudiante?.usuario_id === user?.id
   );
 
+  console.log(yaPostulo)
+
   // Mutación para postular
   const postularMutation = useMutation({
     mutationFn: async () => {
