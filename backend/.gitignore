@@ -14,7 +14,7 @@ coverage/
 Thumbs.db
 logs/
 temp/
-uploads/
+/uploads/
 *.pid
 prisma/*.db
 prisma/*.db-journal
