@@ -2,10 +2,20 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePostulacionDto } from './dto/create-postulacion.dto';
 import { UpdatePostulacionDto } from './dto/update-postulacion.dto';
+import { UpdateConvenioEspecificoDto } from './dto/update-convenio-especifico.dto';
+import { EmpresasService } from '../empresas/empresas.service';
+import {
+  EstadoConvenioEspecifico,
+  EstadoPostulacion,
+  EstadoPractica,
+} from '@prisma/client';
 
 @Injectable()
 export class PostulacionesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private empresasService: EmpresasService,
+  ) {}
 
   async findAll() {
     return this.prisma.postulacion.findMany({
@@ -42,7 +52,7 @@ export class PostulacionesService {
             },
           },
         },
-        seguimiento: true,
+        practica: true,
       },
       orderBy: { fecha_postulacion: 'desc' },
     });
@@ -68,7 +78,7 @@ export class PostulacionesService {
             usuario: true,
           },
         },
-        seguimiento: true,
+        practica: true,
       },
     });
 
@@ -96,7 +106,7 @@ export class PostulacionesService {
             },
           },
         },
-        seguimiento: true,
+        practica: true,
         asesor_academico: {
           include: {
             usuario: {
@@ -145,20 +155,19 @@ export class PostulacionesService {
       throw new ConflictException('Ya te has postulado a esta oferta');
     }
 
-    // Verificar que la oferta esté abierta
-    const oferta = await this.prisma.ofertaPractica.findUnique({
+    const ofertaCompleta = await this.prisma.ofertaPractica.findUnique({
       where: { id: createPostulacionDto.oferta_id },
+      include: { empresa: true },
     });
 
-    if (!oferta) {
+    if (!ofertaCompleta) {
       throw new NotFoundException('Oferta no encontrada');
     }
 
-    if (oferta.estado !== 'abierta') {
+    if (ofertaCompleta.estado !== 'abierta') {
       throw new ConflictException('La oferta no está disponible');
     }
 
-    // Verificar vacantes
     const postulantesAceptados = await this.prisma.postulacion.count({
       where: {
         oferta_id: createPostulacionDto.oferta_id,
@@ -166,9 +175,17 @@ export class PostulacionesService {
       },
     });
 
-    if (postulantesAceptados >= oferta.vacantes) {
+    if (postulantesAceptados >= ofertaCompleta.vacantes) {
       throw new ConflictException('No hay vacantes disponibles');
     }
+
+    const convenioVigente = await this.empresasService.empresaTieneConvenioVigente(
+      ofertaCompleta.empresa_id,
+    );
+    const requiereConvenioEspecifico = !convenioVigente;
+    const estadoConvenioEspecifico = convenioVigente
+      ? EstadoConvenioEspecifico.no_aplica
+      : EstadoConvenioEspecifico.pendiente;
 
     // Crear la postulación
     const postulacion = await this.prisma.postulacion.create({
@@ -177,6 +194,9 @@ export class PostulacionesService {
         estudiante_id: createPostulacionDto.estudiante_id,
         estado: 'postulado',
         fecha_postulacion: new Date(),
+        requiere_convenio_especifico: requiereConvenioEspecifico,
+        estado_convenio_especifico: estadoConvenioEspecifico,
+        cv_url: createPostulacionDto.cv_url,
         ...(createPostulacionDto.asesor_academico_id && {
           asesor_academico_id: createPostulacionDto.asesor_academico_id,
         }),
@@ -202,27 +222,49 @@ export class PostulacionesService {
   async updateEstado(id: number, updatePostulacionDto: UpdatePostulacionDto) {
     const postulacion = await this.findOne(id);
 
+    // if (updatePostulacionDto.estado === 'aceptado') {
+    //   if (
+    //     postulacion.requiere_convenio_especifico &&
+    //     postulacion.estado_convenio_especifico !== EstadoConvenioEspecifico.aprobado
+    //   ) {
+    //     throw new ConflictException(
+    //       'No se puede aceptar la postulación: el convenio específico debe estar aprobado.',
+    //     );
+    //   }
+    // }
+
     const data: any = { estado: updatePostulacionDto.estado };
 
-    // Si se acepta la postulación, crear seguimiento
     if (updatePostulacionDto.estado === 'aceptado') {
-      const existingSeguimiento = await this.prisma.seguimientoPractica.findUnique({
+      const existingPractica = await this.prisma.practica.findUnique({
         where: { postulacion_id: id },
       });
 
-      if (!existingSeguimiento) {
-        await this.prisma.seguimientoPractica.create({
+      if (!existingPractica) {
+        await this.prisma.practica.create({
           data: {
+            estudiante_id: postulacion.estudiante_id,
             postulacion_id: id,
+            asesor_id: postulacion.asesor_academico_id ?? undefined,
             horas_cumplidas: 0,
             horas_totales: 300,
-            evaluacion: 'pendiente',
+            estado: EstadoPractica.plan_pendiente,
           },
+        });
+      }
+
+      // Reducir vacantes de la OfertaPractica
+      const oferta = await this.prisma.ofertaPractica.findUnique({
+        where: { id: postulacion.oferta_id }
+      });
+      if (oferta && oferta.vacantes > 0) {
+        await this.prisma.ofertaPractica.update({
+          where: { id: oferta.id },
+          data: { vacantes: oferta.vacantes - 1 }
         });
       }
     }
 
-    // Si se rechaza o finaliza, actualizar estado
     const updatedPostulacion = await this.prisma.postulacion.update({
       where: { id },
       data,
@@ -237,15 +279,54 @@ export class PostulacionesService {
             usuario: true,
           },
         },
-        seguimiento: true,
+        practica: true,
       },
     });
 
     return updatedPostulacion;
   }
 
+  async updateConvenioEspecifico(
+    id: number,
+    dto: UpdateConvenioEspecificoDto,
+  ) {
+    const postulacion = await this.findOne(id);
+
+    if (!postulacion.requiere_convenio_especifico) {
+      throw new ConflictException(
+        'Esta postulación no requiere trámite de convenio específico.',
+      );
+    }
+
+    return this.prisma.postulacion.update({
+      where: { id },
+      data: { estado_convenio_especifico: dto.estado },
+      include: {
+        oferta: {
+          include: { empresa: true },
+        },
+        estudiante: {
+          include: {
+            usuario: {
+              select: { nombres: true, apellidos: true, email: true },
+            },
+          },
+        },
+        practica: true,
+      },
+    });
+  }
+
   async asignarAsesor(postulacionId: number, asesorId: number) {
-    await this.findOne(postulacionId);
+    const postulacion = await this.findOne(postulacionId);
+
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { id: asesorId },
+      select: { id: true },
+    });
+    if (!asesor) {
+      throw new NotFoundException(`Asesor con ID ${asesorId} no encontrado`);
+    }
 
     // Verificar si ya tiene asesor asignado
     const existing = await this.prisma.asesorPostulacion.findUnique({
@@ -270,7 +351,30 @@ export class PostulacionesService {
       // También actualizar el asesor_academico_id en la postulación
       await this.prisma.postulacion.update({
         where: { id: postulacionId },
-        data: { asesor_academico_id: asesorId },
+        data: {
+          asesor_academico_id: asesorId,
+          ...(postulacion.estado === EstadoPostulacion.aceptado && {
+            estado: EstadoPostulacion.en_curso,
+          }),
+        },
+      });
+
+      await this.prisma.practica.updateMany({
+        where: {
+          postulacion_id: postulacionId,
+          estado: { in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado] },
+        },
+        data: { asesor_id: asesorId, estado: EstadoPractica.en_ejecucion },
+      });
+
+      await this.prisma.practica.updateMany({
+        where: {
+          postulacion_id: postulacionId,
+          NOT: {
+            estado: { in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado] },
+          },
+        },
+        data: { asesor_id: asesorId },
       });
     } else {
       // Crear asignación
@@ -291,7 +395,30 @@ export class PostulacionesService {
       // Actualizar el asesor_academico_id en la postulación
       await this.prisma.postulacion.update({
         where: { id: postulacionId },
-        data: { asesor_academico_id: asesorId },
+        data: {
+          asesor_academico_id: asesorId,
+          ...(postulacion.estado === EstadoPostulacion.aceptado && {
+            estado: EstadoPostulacion.en_curso,
+          }),
+        },
+      });
+
+      await this.prisma.practica.updateMany({
+        where: {
+          postulacion_id: postulacionId,
+          estado: { in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado] },
+        },
+        data: { asesor_id: asesorId, estado: EstadoPractica.en_ejecucion },
+      });
+
+      await this.prisma.practica.updateMany({
+        where: {
+          postulacion_id: postulacionId,
+          NOT: {
+            estado: { in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado] },
+          },
+        },
+        data: { asesor_id: asesorId },
       });
     }
 
@@ -332,7 +459,7 @@ export class PostulacionesService {
             escuela: true,
           },
         },
-        seguimiento: true,
+        practica: true,
         asesor_academico: {
           include: {
             usuario: {

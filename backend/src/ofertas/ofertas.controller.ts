@@ -16,6 +16,7 @@ import { PostulacionesService } from './postulaciones.service';
 import { CreateOfertaDto } from './dto/create-oferta.dto';
 import { UpdateOfertaDto } from './dto/update-oferta.dto';
 import { UpdatePostulacionDto } from './dto/update-postulacion.dto';
+import { UpdateConvenioEspecificoDto } from './dto/update-convenio-especifico.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -33,7 +34,7 @@ export class OfertasController {
   ) { }
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria, RolNombre.empresa)
   async findAll(
     @Query('empresa_id') empresa_id?: string,
     @Query('estado') estado?: string,
@@ -48,7 +49,7 @@ export class OfertasController {
   }
 
   @Get('mis-postulaciones')
-  @Roles(RolNombre.estudiante)
+  @Roles(RolNombre.estudiante, RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async getMisPostulaciones(@CurrentUser() user: any) {
     const estudiante = await this.prismaService.estudiante.findUnique({
       where: { usuario_id: user.id },
@@ -65,7 +66,7 @@ export class OfertasController {
   }
 
   @Get(':id')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria, RolNombre.empresa)
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const oferta = await this.ofertasService.findOne(id);
     return { data: oferta };
@@ -104,9 +105,9 @@ export class OfertasController {
 
   // Postulaciones
   @Get(':id/postulaciones')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante, RolNombre.empresa)
   async getPostulaciones(@Param('id', ParseIntPipe) ofertaId: number) {
-    const postulaciones = await this.postulacionesService.findAll();
+    const postulaciones = await this.postulacionesService.findByOferta(ofertaId);
     return { data: postulaciones };
   }
 
@@ -115,6 +116,7 @@ export class OfertasController {
   @Roles(RolNombre.estudiante)
   async postular(
     @Param('id', ParseIntPipe) ofertaId: number,
+    @Body() body: { cv_url?: string },
     @CurrentUser() user: any,
   ) {
     // Buscar el estudiante por el usuario_id
@@ -130,13 +132,14 @@ export class OfertasController {
     const postulacion = await this.postulacionesService.create({
       oferta_id: ofertaId,
       estudiante_id: estudiante.id,
+      cv_url: body.cv_url,
     });
 
     return { data: postulacion, message: 'Postulación realizada exitosamente' };
   }
 
   @Put('postulaciones/:postulacionId/estado')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.empresa)
   async updateEstadoPostulacion(
     @Param('postulacionId', ParseIntPipe) postulacionId: number,
     @Body() updatePostulacionDto: UpdatePostulacionDto,
@@ -146,6 +149,19 @@ export class OfertasController {
       updatePostulacionDto,
     );
     return { data: postulacion, message: 'Estado actualizado exitosamente' };
+  }
+
+  @Put('postulaciones/:postulacionId/convenio-especifico')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async updateConvenioEspecifico(
+    @Param('postulacionId', ParseIntPipe) postulacionId: number,
+    @Body() dto: UpdateConvenioEspecificoDto,
+  ) {
+    const postulacion = await this.postulacionesService.updateConvenioEspecifico(
+      postulacionId,
+      dto,
+    );
+    return { data: postulacion, message: 'Estado de convenio específico actualizado' };
   }
 
   @Post('postulaciones/:postulacionId/asignar-asesor/:asesorId')

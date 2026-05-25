@@ -1,31 +1,43 @@
 'use client';
 
+/**
+ * Alineado con CreateEmpresaDto / UpdateEmpresaDto del backend (sin sector, descripción ni sitio web).
+ */
+
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const empresaSchema = z.object({
   razon_social: z.string().min(1, 'La razón social es requerida'),
-  ruc: z.string().min(11, 'El RUC debe tener 11 dígitos').max(11, 'El RUC debe tener 11 dígitos'),
-  direccion: z.string().min(1, 'La dirección es requerida'),
+  ruc: z.string().length(11, 'El RUC debe tener 11 dígitos'),
+  direccion: z.string().optional(),
   telefono: z.string().optional(),
-  email: z.string().email('Email inválido'),
-  descripcion: z.string().optional(),
-  sitio_web: z.string().url('URL inválida').optional().or(z.literal('')),
-  sector: z.string().min(1, 'El sector es requerido'),
+  email_contacto: z.string().email('Email inválido').optional().or(z.literal('')),
+  representante: z.string().optional(),
+  convenio_activo: z.boolean().optional(),
 });
 
-type EmpresaFormData = z.infer<typeof empresaSchema>;
+export type EmpresaEditFormData = z.infer<typeof empresaSchema>;
 
 interface EmpresaEditFormProps {
-  empresa: any;
-  onSubmit: (data: EmpresaFormData) => void;
+  empresa: {
+    razon_social?: string;
+    ruc?: string;
+    direccion?: string | null;
+    telefono?: string | null;
+    email_contacto?: string | null;
+    /** compat listing viejo */
+    email?: string | null;
+    representante?: string | null;
+    convenio_activo?: boolean;
+  };
+  onSubmit: (data: EmpresaEditFormData) => void;
   onCancel: () => void;
   isLoading?: boolean;
 }
@@ -34,45 +46,46 @@ export function EmpresaEditForm({ empresa, onSubmit, onCancel, isLoading }: Empr
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
-  } = useForm<EmpresaFormData>({
+  } = useForm<EmpresaEditFormData>({
     resolver: zodResolver(empresaSchema),
     defaultValues: {
-      razon_social: empresa.razon_social,
-      ruc: empresa.ruc,
-      direccion: empresa.direccion,
-      telefono: empresa.telefono,
-      email: empresa.email,
-      descripcion: empresa.descripcion,
-      sitio_web: empresa.sitio_web,
-      sector: empresa.sector,
+      razon_social: empresa.razon_social ?? '',
+      ruc: empresa.ruc ?? '',
+      direccion: empresa.direccion ?? '',
+      telefono: empresa.telefono ?? '',
+      email_contacto: empresa.email_contacto ?? empresa.email ?? '',
+      representante: empresa.representante ?? '',
+      convenio_activo: empresa.convenio_activo ?? false,
     },
   });
 
-  const handleFormSubmit = (data: EmpresaFormData) => {
-    // Convert empty string to undefined for sitio_web
-    const submitData = {
-      ...data,
-      sitio_web: data.sitio_web || undefined,
-    };
-    onSubmit(submitData);
+  const submit = (data: EmpresaEditFormData) => {
+    onSubmit({
+      razon_social: data.razon_social,
+      ruc: data.ruc,
+      ...(data.direccion?.trim() ? { direccion: data.direccion.trim() } : {}),
+      ...(data.telefono?.trim() ? { telefono: data.telefono.trim() } : {}),
+      ...(data.email_contacto?.trim()
+        ? { email_contacto: data.email_contacto.trim() }
+        : {}),
+      ...(data.representante?.trim() ? { representante: data.representante.trim() } : {}),
+      ...(data.convenio_activo !== undefined ? { convenio_activo: data.convenio_activo } : {}),
+    });
   };
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
-        <CardTitle>Editar Empresa</CardTitle>
+        <CardTitle>Editar empresa</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(submit)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="razon_social">Razón Social</Label>
-              <Input
-                id="razon_social"
-                {...register('razon_social')}
-                placeholder="Nombre de la empresa"
-              />
+              <Label htmlFor="razon_social">Razón social</Label>
+              <Input id="razon_social" {...register('razon_social')} />
               {errors.razon_social && (
                 <p className="text-sm text-red-600">{errors.razon_social.message}</p>
               )}
@@ -80,94 +93,51 @@ export function EmpresaEditForm({ empresa, onSubmit, onCancel, isLoading }: Empr
 
             <div className="space-y-2">
               <Label htmlFor="ruc">RUC</Label>
-              <Input
-                id="ruc"
-                {...register('ruc')}
-                placeholder="12345678901"
-                maxLength={11}
-              />
-              {errors.ruc && (
-                <p className="text-sm text-red-600">{errors.ruc.message}</p>
-              )}
+              <Input id="ruc" {...register('ruc')} maxLength={11} placeholder="12345678901" />
+              {errors.ruc && <p className="text-sm text-red-600">{errors.ruc.message}</p>}
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="direccion">Dirección</Label>
-            <Input
-              id="direccion"
-              {...register('direccion')}
-              placeholder="Dirección completa de la empresa"
-            />
-            {errors.direccion && (
-              <p className="text-sm text-red-600">{errors.direccion.message}</p>
-            )}
+            <Input id="direccion" {...register('direccion')} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="telefono">Teléfono</Label>
-              <Input
-                id="telefono"
-                {...register('telefono')}
-                placeholder="+51 123 456 789"
-              />
-              {errors.telefono && (
-                <p className="text-sm text-red-600">{errors.telefono.message}</p>
-              )}
+              <Input id="telefono" {...register('telefono')} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                {...register('email')}
-                placeholder="contacto@empresa.com"
-              />
-              {errors.email && (
-                <p className="text-sm text-red-600">{errors.email.message}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="sitio_web">Sitio Web</Label>
-              <Input
-                id="sitio_web"
-                {...register('sitio_web')}
-                placeholder="https://www.empresa.com"
-              />
-              {errors.sitio_web && (
-                <p className="text-sm text-red-600">{errors.sitio_web.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="sector">Sector</Label>
-              <Input
-                id="sector"
-                {...register('sector')}
-                placeholder="Tecnología, Manufactura, etc."
-              />
-              {errors.sector && (
-                <p className="text-sm text-red-600">{errors.sector.message}</p>
+              <Label htmlFor="email_contacto">Email de contacto</Label>
+              <Input id="email_contacto" type="email" {...register('email_contacto')} />
+              {errors.email_contacto && (
+                <p className="text-sm text-red-600">{errors.email_contacto.message}</p>
               )}
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="descripcion">Descripción</Label>
-            <Textarea
-              id="descripcion"
-              {...register('descripcion')}
-              placeholder="Descripción de la empresa..."
-              rows={3}
+            <Label htmlFor="representante">Representante</Label>
+            <Input id="representante" {...register('representante')} />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Controller
+              name="convenio_activo"
+              control={control}
+              render={({ field }) => (
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={field.value ?? false}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                  />
+                  Convenio activo
+                </label>
+              )}
             />
-            {errors.descripcion && (
-              <p className="text-sm text-red-600">{errors.descripcion.message}</p>
-            )}
           </div>
 
           <div className="flex justify-end gap-2">
@@ -175,7 +145,7 @@ export function EmpresaEditForm({ empresa, onSubmit, onCancel, isLoading }: Empr
               Cancelar
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+              {isLoading ? 'Guardando...' : 'Guardar cambios'}
             </Button>
           </div>
         </form>

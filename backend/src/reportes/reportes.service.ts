@@ -270,6 +270,8 @@ export class ReportesService {
               <div class="value value-normal">
                 ${this.escapeHtml(tesis.estudiante?.usuario?.apellidos)}, ${this.escapeHtml(tesis.estudiante?.usuario?.nombres)}
               </div>
+              <div class="label" style="margin-top: 6px;">Código universitario</div>
+              <div class="value value-normal">${this.escapeHtml(tesis.estudiante?.codigo_universitario)}</div>
               <div class="label" style="margin-top: 6px;">DNI / Email</div>
               <div class="value value-normal">
                 ${this.escapeHtml(tesis.estudiante?.usuario?.dni)} / ${this.escapeHtml(tesis.estudiante?.usuario?.email)}
@@ -435,7 +437,7 @@ export class ReportesService {
             },
           },
         },
-        seguimiento: true,
+        practica: true,
         asesor_academico: {
           include: {
             usuario: {
@@ -454,9 +456,8 @@ export class ReportesService {
       total: practicas.length,
       en_curso: practicas.filter((p) => p.estado === 'en_curso').length,
       finalizadas: practicas.filter((p) => p.estado === 'finalizado').length,
-      aprobadas: practicas.filter(
-        (p) => p.seguimiento?.evaluacion === 'aprobado',
-      ).length,
+      aprobadas: practicas.filter((p) => p.practica?.estado === 'aprobado')
+        .length,
     };
 
     const htmlContent = `
@@ -584,7 +585,7 @@ export class ReportesService {
               <th>Empresa</th>
               <th>Horas</th>
               <th>Estado</th>
-              <th>Evaluación</th>
+              <th>Estado práctica</th>
             </tr>
           </thead>
           <tbody>
@@ -596,9 +597,9 @@ export class ReportesService {
                 <td>${p.estudiante.usuario.dni}</td>
                 <td>${p.estudiante.escuela.nombre}</td>
                 <td>${p.oferta.empresa.razon_social}</td>
-                <td>${p.seguimiento?.horas_cumplidas || 0} / ${p.seguimiento?.horas_totales || 300}</td>
+                <td>${p.practica?.horas_cumplidas || 0} / ${p.practica?.horas_totales || 300}</td>
                 <td><span class="badge badge-${p.estado === 'finalizado' ? 'success' : p.estado === 'en_curso' ? 'info' : 'warning'}">${p.estado.replace('_', ' ')}</span></td>
-                <td><span class="badge badge-${p.seguimiento?.evaluacion === 'aprobado' ? 'success' : p.seguimiento?.evaluacion === 'desaprobado' ? 'danger' : 'warning'}">${p.seguimiento?.evaluacion || 'pendiente'}</span></td>
+                <td><span class="badge badge-${p.practica?.estado === 'aprobado' ? 'success' : p.practica?.estado === 'plan_pendiente' ? 'warning' : 'info'}">${p.practica?.estado?.replace(/_/g, ' ') || 'sin registro'}</span></td>
               </tr>
             `,
               )
@@ -655,7 +656,10 @@ export class ReportesService {
     const estadisticas = {
       total: tesis.length,
       en_desarrollo: tesis.filter((t) => t.estado === 'desarrollo').length,
-      en_sustentacion: tesis.filter((t) => t.estado === 'sustentacion').length,
+      en_sustentacion: tesis.filter(
+        (t) =>
+          t.estado === 'sustentacion_programada' || t.estado === 'sustentado',
+      ).length,
       culminadas: tesis.filter((t) => t.estado === 'culminado').length,
     };
 
@@ -794,7 +798,7 @@ export class ReportesService {
                 <td>${t.estudiante.usuario.apellidos}, ${t.estudiante.usuario.nombres}</td>
                 <td>${t.asesor_principal.usuario.apellidos}, ${t.asesor_principal.usuario.nombres}</td>
                 <td>${t.estudiante.escuela.nombre}</td>
-                <td><span class="badge badge-${t.estado === 'culminado' ? 'success' : t.estado === 'sustentacion' ? 'warning' : 'info'}">${t.estado}</span></td>
+                <td><span class="badge badge-${t.estado === 'culminado' ? 'success' : t.estado === 'sustentacion_programada' || t.estado === 'sustentado' ? 'warning' : 'info'}">${t.estado}</span></td>
                 <td>${t.acta?.nota_final || '-'}</td>
               </tr>
             `,
@@ -935,6 +939,89 @@ export class ReportesService {
     });
 
     return pdf;
+  }
+
+  async generarActaFirmaJurados(tesisId: number) {
+    const tesis = await this.prisma.tesis.findUnique({
+      where: { id: tesisId },
+      include: {
+        estudiante: { include: { usuario: true } },
+        asesor_principal: { include: { usuario: true } },
+        jurados: {
+          include: {
+            asesor: { include: { usuario: true } },
+          },
+        },
+        acta: true,
+      },
+    });
+
+    if (!tesis) {
+      throw new NotFoundException(`Tesis con ID ${tesisId} no encontrada`);
+    }
+
+    const filasJurado =
+      tesis.jurados?.length > 0
+        ? tesis.jurados
+            .map(
+              (j) => `
+            <tr>
+              <td>${this.escapeHtml(j.asesor?.usuario?.apellidos)}, ${this.escapeHtml(j.asesor?.usuario?.nombres)}</td>
+              <td>${this.escapeHtml(j.rol)}</td>
+              <td style="height: 36px; border-bottom: 1px solid #111;">&nbsp;</td>
+              <td style="height: 36px; border-bottom: 1px solid #111;">&nbsp;</td>
+            </tr>`,
+            )
+            .join('')
+        : `<tr><td colspan="4">(Jurado pendiente de asignación en el sistema)</td></tr>`;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          body { font-family: Arial, sans-serif; font-size: 12px; color: #111; }
+          h1 { text-align: center; font-size: 16px; }
+          .meta { margin: 12px 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+          th { background: #1a365d; color: #fff; }
+          .firma { min-height: 40px; }
+        </style>
+      </head>
+      <body>
+        <h1>Acta de sustentación — campos para calificación y firma del jurado</h1>
+        <p class="meta"><strong>Programa / trámite tipo FUT (referencia UNT):</strong> documento generado para completar y firmar en original.</p>
+        <div class="meta">
+          <div><strong>Estudiante:</strong> ${this.escapeHtml(tesis.estudiante?.usuario?.apellidos)}, ${this.escapeHtml(tesis.estudiante?.usuario?.nombres)} — <strong>Código:</strong> ${this.escapeHtml(tesis.estudiante?.codigo_universitario)}</div>
+          <div><strong>Tema:</strong> ${this.escapeHtml(tesis.titulo)}</div>
+          <div><strong>Asesor:</strong> ${this.escapeHtml(tesis.asesor_principal?.usuario?.apellidos)}, ${this.escapeHtml(tesis.asesor_principal?.usuario?.nombres)}</div>
+          ${
+            tesis.acta
+              ? `<div><strong>Fecha sustentación:</strong> ${this.formatFechaCorta(tesis.acta.fecha as any)} — <strong>Lugar:</strong> ${this.escapeHtml(tesis.acta.lugar || '-')}</div>`
+              : ''
+          }
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Jurado</th>
+              <th>Rol</th>
+              <th>Calificación / voto (llenar)</th>
+              <th>Firma</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasJurado}
+          </tbody>
+        </table>
+        <p style="margin-top: 20px;">Nota final (secretaría / acta oficial): __________________</p>
+      </body>
+      </html>
+    `;
+
+    return this.generatePDF(htmlContent);
   }
 
   async getHistorialReportes() {

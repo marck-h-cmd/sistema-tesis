@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * Edición de **oferta de práctica** (`OfertaPractica`), alineado con CreateOfertaDto / UpdateOfertaDto.
+ * No incluye campos legacy (ubicación, duración en meses, salario) que el API rechaza.
+ */
+
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,195 +16,176 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-const practicaSchema = z.object({
+const ofertaEditSchema = z.object({
+  empresa_id: z.number().min(1, 'Empresa requerida'),
   titulo: z.string().min(1, 'El título es requerido'),
   descripcion: z.string().min(1, 'La descripción es requerida'),
-  requisitos: z.string().min(1, 'Los requisitos son requeridos'),
-  ubicacion: z.string().min(1, 'La ubicación es requerida'),
-  modalidad: z.enum(['presencial', 'remota', 'hibrida']),
-  duracion_meses: z.number().min(1, 'La duración debe ser al menos 1 mes'),
+  requisitos: z.string().optional(),
   fecha_inicio: z.string().min(1, 'La fecha de inicio es requerida'),
   fecha_fin: z.string().min(1, 'La fecha de fin es requerida'),
   vacantes: z.number().min(1, 'Debe haber al menos 1 vacante'),
-  salario: z.number().optional(),
+  modalidad: z.enum(['presencial', 'remota', 'hibrida']),
 });
 
-type PracticaFormData = z.infer<typeof practicaSchema>;
+export type OfertaEditFormData = z.infer<typeof ofertaEditSchema>;
 
 interface PracticaEditFormProps {
-  practica: any;
-  onSubmit: (data: PracticaFormData) => void;
+  /** Objeto oferta (lista prácticas usa `ofertas`) */
+  practica: {
+    empresa_id?: number;
+    empresa?: { id?: number };
+    titulo?: string;
+    descripcion?: string;
+    requisitos?: string | null;
+    fecha_inicio?: string;
+    fecha_fin?: string;
+    vacantes?: number;
+    modalidad?: string;
+  };
+  onSubmit: (data: OfertaEditFormData) => void;
   onCancel: () => void;
   isLoading?: boolean;
 }
 
 export function PracticaEditForm({ practica, onSubmit, onCancel, isLoading }: PracticaEditFormProps) {
+  const empresaId = practica.empresa_id ?? practica.empresa?.id ?? 0;
+
   const {
     register,
     handleSubmit,
     setValue,
     watch,
     formState: { errors },
-  } = useForm<PracticaFormData>({
-    resolver: zodResolver(practicaSchema),
+  } = useForm<OfertaEditFormData>({
+    resolver: zodResolver(ofertaEditSchema),
     defaultValues: {
-      titulo: practica.titulo,
-      descripcion: practica.descripcion,
-      requisitos: practica.requisitos,
-      ubicacion: practica.ubicacion,
-      modalidad: practica.modalidad,
-      duracion_meses: practica.duracion_meses,
-      fecha_inicio: practica.fecha_inicio?.split('T')[0],
-      fecha_fin: practica.fecha_fin?.split('T')[0],
-      vacantes: practica.vacantes,
-      salario: practica.salario,
+      empresa_id: empresaId,
+      titulo: practica.titulo ?? '',
+      descripcion: practica.descripcion ?? '',
+      requisitos: practica.requisitos ?? '',
+      fecha_inicio:
+        typeof practica.fecha_inicio === 'string'
+          ? practica.fecha_inicio.split('T')[0]
+          : '',
+      fecha_fin:
+        typeof practica.fecha_fin === 'string' ? practica.fecha_fin.split('T')[0] : '',
+      vacantes: practica.vacantes ?? 1,
+      modalidad: (practica.modalidad as OfertaEditFormData['modalidad']) ?? 'presencial',
     },
   });
 
-  const handleFormSubmit = (data: PracticaFormData) => {
-    onSubmit(data);
+  const submit = (data: OfertaEditFormData) => {
+    onSubmit({
+      empresa_id: data.empresa_id,
+      titulo: data.titulo,
+      descripcion: data.descripcion,
+      ...(data.requisitos?.trim() ? { requisitos: data.requisitos.trim() } : {}),
+      fecha_inicio: data.fecha_inicio,
+      fecha_fin: data.fecha_fin,
+      vacantes: data.vacantes,
+      modalidad: data.modalidad,
+    });
   };
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
-        <CardTitle>Editar Práctica Preprofesional</CardTitle>
+        <CardTitle>Editar oferta de práctica</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(submit)} className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="empresa_id">ID empresa</Label>
+            <Input
+              id="empresa_id"
+              type="number"
+              min={1}
+              {...register('empresa_id', { valueAsNumber: true })}
+            />
+            {errors.empresa_id && (
+              <p className="text-sm text-red-600">{errors.empresa_id.message}</p>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="titulo">Título</Label>
-              <Input
-                id="titulo"
-                {...register('titulo')}
-                placeholder="Título de la práctica"
-              />
+              <Input id="titulo" {...register('titulo')} placeholder="Título de la oferta" />
               {errors.titulo && (
                 <p className="text-sm text-red-600">{errors.titulo.message}</p>
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="ubicacion">Ubicación</Label>
-              <Input
-                id="ubicacion"
-                {...register('ubicacion')}
-                placeholder="Ciudad, Provincia"
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Textarea
+                id="descripcion"
+                {...register('descripcion')}
+                placeholder="Describe las actividades..."
+                rows={4}
               />
-              {errors.ubicacion && (
-                <p className="text-sm text-red-600">{errors.ubicacion.message}</p>
+              {errors.descripcion && (
+                <p className="text-sm text-red-600">{errors.descripcion.message}</p>
               )}
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="descripcion">Descripción</Label>
-            <Textarea
-              id="descripcion"
-              {...register('descripcion')}
-              placeholder="Describe las actividades y responsabilidades..."
-              rows={4}
-            />
-            {errors.descripcion && (
-              <p className="text-sm text-red-600">{errors.descripcion.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="requisitos">Requisitos</Label>
-            <Textarea
-              id="requisitos"
-              {...register('requisitos')}
-              placeholder="Requisitos necesarios para postular..."
-              rows={3}
-            />
-            {errors.requisitos && (
-              <p className="text-sm text-red-600">{errors.requisitos.message}</p>
-            )}
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="requisitos">Requisitos (opcional)</Label>
+              <Textarea
+                id="requisitos"
+                {...register('requisitos')}
+                placeholder="Requisitos para postular..."
+                rows={3}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="modalidad">Modalidad</Label>
               <Select
-              id="modalidad"
-              className="w-full"
-              value={watch('modalidad')}
-              options={[
-                { value: '', label: 'Seleccionar modalidad' },
-                { value: 'presencial', label: 'Presencial' },
-                { value: 'remota', label: 'Remota' },
-                { value: 'hibrida', label: 'Híbrida' },
-              ]}
-              onChange={(e) => setValue('modalidad', e.target.value as any)}
-            />
+                id="modalidad"
+                className="w-full"
+                value={watch('modalidad')}
+                options={[
+                  { value: 'presencial', label: 'Presencial' },
+                  { value: 'remota', label: 'Remota' },
+                  { value: 'hibrida', label: 'Híbrida' },
+                ]}
+                onChange={(e) =>
+                  setValue('modalidad', e.target.value as OfertaEditFormData['modalidad'])
+                }
+              />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="duracion_meses">Duración (meses)</Label>
+              <Label htmlFor="vacantes">Vacantes</Label>
               <Input
-                id="duracion_meses"
+                id="vacantes"
                 type="number"
-                {...register('duracion_meses', { valueAsNumber: true })}
-                placeholder="6"
+                {...register('vacantes', { valueAsNumber: true })}
+                min={1}
               />
-              {errors.duracion_meses && (
-                <p className="text-sm text-red-600">{errors.duracion_meses.message}</p>
+              {errors.vacantes && (
+                <p className="text-sm text-red-600">{errors.vacantes.message}</p>
               )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="fecha_inicio">Fecha de Inicio</Label>
-              <Input
-                id="fecha_inicio"
-                type="date"
-                {...register('fecha_inicio')}
-              />
+              <Label htmlFor="fecha_inicio">Fecha de inicio</Label>
+              <Input id="fecha_inicio" type="date" {...register('fecha_inicio')} />
               {errors.fecha_inicio && (
                 <p className="text-sm text-red-600">{errors.fecha_inicio.message}</p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="fecha_fin">Fecha de Fin</Label>
-              <Input
-                id="fecha_fin"
-                type="date"
-                {...register('fecha_fin')}
-              />
+              <Label htmlFor="fecha_fin">Fecha de fin</Label>
+              <Input id="fecha_fin" type="date" {...register('fecha_fin')} />
               {errors.fecha_fin && (
                 <p className="text-sm text-red-600">{errors.fecha_fin.message}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="vacantes">Vacantes Disponibles</Label>
-              <Input
-                id="vacantes"
-                type="number"
-                {...register('vacantes', { valueAsNumber: true })}
-                placeholder="5"
-              />
-              {errors.vacantes && (
-                <p className="text-sm text-red-600">{errors.vacantes.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="salario">Salario (opcional)</Label>
-              <Input
-                id="salario"
-                type="number"
-                {...register('salario', { valueAsNumber: true })}
-                placeholder="1500"
-              />
-              {errors.salario && (
-                <p className="text-sm text-red-600">{errors.salario.message}</p>
               )}
             </div>
           </div>
@@ -209,7 +195,7 @@ export function PracticaEditForm({ practica, onSubmit, onCancel, isLoading }: Pr
               Cancelar
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+              {isLoading ? 'Guardando...' : 'Guardar cambios'}
             </Button>
           </div>
         </form>

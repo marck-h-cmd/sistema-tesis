@@ -1,11 +1,18 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEstudianteDto } from './dto/create-estudiante.dto';
 import { UpdateEstudianteDto } from './dto/update-estudiante.dto';
+import { PppGateService } from '../ppp/ppp-gate.service';
+import { EstadoPractica, EstadoTesis } from '@prisma/client';
 
 @Injectable()
 export class EstudiantesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private pppGate: PppGateService,
+    private configService: ConfigService,
+  ) {}
 
   async findAll() {
     return this.prisma.estudiante.findMany({
@@ -83,6 +90,16 @@ export class EstudiantesService {
                 },
               },
             },
+            practica: {
+              select: {
+                id: true,
+                estado: true,
+                horas_cumplidas: true,
+                horas_totales: true,
+                fecha_inicio: true,
+                fecha_fin_estimada: true,
+              },
+            },
           },
           orderBy: { fecha_postulacion: 'desc' },
         },
@@ -154,12 +171,13 @@ export class EstudiantesService {
   }
 
   async update(id: number, updateEstudianteDto: UpdateEstudianteDto) {
-    await this.findOne(id);
+    const estudiante = await this.findOne(id);
+    const { usuario: usuarioPatch, ...estPatch } = updateEstudianteDto;
 
-    if (updateEstudianteDto.codigo_universitario) {
+    if (estPatch.codigo_universitario) {
       const existing = await this.prisma.estudiante.findFirst({
         where: {
-          codigo_universitario: updateEstudianteDto.codigo_universitario,
+          codigo_universitario: estPatch.codigo_universitario,
           id: { not: id },
         },
       });
@@ -169,21 +187,54 @@ export class EstudiantesService {
       }
     }
 
-    return this.prisma.estudiante.update({
-      where: { id },
-      data: updateEstudianteDto,
-      include: {
-        usuario: {
-          select: {
-            id: true,
-            email: true,
-            nombres: true,
-            apellidos: true,
+    if (usuarioPatch && Object.keys(usuarioPatch).length > 0) {
+      if (usuarioPatch.email) {
+        const u = await this.prisma.usuario.findFirst({
+          where: {
+            email: usuarioPatch.email,
+            id: { not: estudiante.usuario_id },
           },
-        },
-        escuela: true,
-      },
-    });
+        });
+        if (u) {
+          throw new ConflictException('El email ya está registrado');
+        }
+      }
+      if (usuarioPatch.dni) {
+        const u = await this.prisma.usuario.findFirst({
+          where: {
+            dni: usuarioPatch.dni,
+            id: { not: estudiante.usuario_id },
+          },
+        });
+        if (u) {
+          throw new ConflictException('El DNI ya está registrado');
+        }
+      }
+      await this.prisma.usuario.update({
+        where: { id: estudiante.usuario_id },
+        data: usuarioPatch,
+      });
+    }
+
+    const estudianteData: {
+      codigo_universitario?: string;
+      escuela_id?: number;
+    } = {};
+    if (estPatch.codigo_universitario !== undefined) {
+      estudianteData.codigo_universitario = estPatch.codigo_universitario;
+    }
+    if (estPatch.escuela_id !== undefined) {
+      estudianteData.escuela_id = estPatch.escuela_id;
+    }
+
+    if (Object.keys(estudianteData).length > 0) {
+      await this.prisma.estudiante.update({
+        where: { id },
+        data: estudianteData,
+      });
+    }
+
+    return this.findOne(id);
   }
 
   async remove(id: number) {
@@ -221,7 +272,7 @@ export class EstudiantesService {
             },
           },
         },
-        seguimiento: true,
+        practica: true,
       },
       orderBy: { fecha_postulacion: 'desc' },
     });
@@ -263,5 +314,148 @@ export class EstudiantesService {
         acta: true,
       },
     });
+  }
+
+  /** Estado de gates PPP/Tesis para el frontend (bloqueos y flags). */
+  async getEstadoModulos(estudianteId: number) {
+    await this.findOne(estudianteId);
+
+    const habilitacion =
+      await this.pppGate.getDetalleHabilitacionTesis(estudianteId);
+
+    const postulacionActiva = await this.prisma.postulacion.findFirst({
+      where: {
+        estudiante_id: estudianteId,
+        estado: { in: ['postulado', 'aceptado', 'en_curso'] },
+      },
+      include: { practica: true, oferta: { include: { empresa: true } } },
+      orderBy: { fecha_postulacion: 'desc' },
+    });
+
+    const umbralRevision =
+      this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
+      300;
+
+    const practicaRow = postulacionActiva?.practica;
+
+    const horasMin =
+      practicaRow != null
+        ? {
+            cumplidas: practicaRow.horas_cumplidas,
+            totales: practicaRow.horas_totales,
+            umbral_revision_informe: umbralRevision,
+            puede_solicitar_revision_informe_final:
+              practicaRow.horas_cumplidas >= umbralRevision &&
+              (practicaRow.estado === EstadoPractica.en_ejecucion ||
+                practicaRow.estado === EstadoPractica.plan_validado),
+          }
+        : null;
+
+    const tesisActiva = await this.prisma.tesis.findFirst({
+      where: {
+        estudiante_id: estudianteId,
+        estado: { not: EstadoTesis.culminado },
+      },
+      orderBy: { updated_at: 'desc' },
+      select: { id: true, estado: true },
+    });
+
+    const workflowEtapa = this.resolverWorkflowEtapa({
+      practicaEstado: practicaRow?.estado ?? null,
+      tienePracticaAprobada: habilitacion.tiene_practica_aprobada,
+      tesisEstado: tesisActiva?.estado ?? null,
+    });
+
+    return {
+      ...habilitacion,
+      modulo_tesis_desbloqueado: habilitacion.puede_registrar_tesis,
+      /** Alias explícito para el condicional de sustentación en frontend */
+      practicas_status: habilitacion.practicas_status,
+      practicas_aprobadas: habilitacion.tiene_practica_aprobada,
+      workflow_etapa: workflowEtapa,
+      postulacion_practica_activa: postulacionActiva
+        ? {
+            id: postulacionActiva.id,
+            estado: postulacionActiva.estado,
+            requiere_convenio_especifico:
+              postulacionActiva.requiere_convenio_especifico,
+            estado_convenio_especifico:
+              postulacionActiva.estado_convenio_especifico,
+          }
+        : null,
+      practica_id: practicaRow?.id ?? null,
+      seguimiento_practica: practicaRow
+        ? {
+            id: practicaRow.id,
+            estado_practica: practicaRow.estado,
+            horas_cumplidas: practicaRow.horas_cumplidas,
+            horas_totales: practicaRow.horas_totales,
+            plan_validado: practicaRow.plan_validado,
+            informe_aprobado: practicaRow.informe_aprobado,
+          }
+        : null,
+      horas_resumen: horasMin,
+      tesis_activa: tesisActiva,
+    };
+  }
+
+  private resolverWorkflowEtapa(input: {
+    practicaEstado: EstadoPractica | null;
+    tienePracticaAprobada: boolean;
+    tesisEstado: EstadoTesis | null;
+  }):
+    | 'practicante'
+    | 'egresado'
+    | 'tesista'
+    | 'en_revision'
+    | 'expedito'
+    | 'sustentacion' {
+    const { practicaEstado, tienePracticaAprobada, tesisEstado } = input;
+
+    if (!tienePracticaAprobada) {
+      if (
+        practicaEstado === EstadoPractica.plan_pendiente ||
+        practicaEstado === EstadoPractica.plan_validado
+      ) {
+        return 'practicante';
+      }
+      if (
+        practicaEstado === EstadoPractica.informe_pendiente ||
+        practicaEstado === EstadoPractica.en_ejecucion
+      ) {
+        return 'egresado';
+      }
+      return 'practicante';
+    }
+
+    if (
+      !tesisEstado ||
+      tesisEstado === EstadoTesis.propuesta ||
+      tesisEstado === EstadoTesis.desarrollo
+    ) {
+      return 'tesista';
+    }
+
+    if (
+      tesisEstado === EstadoTesis.en_revision ||
+      tesisEstado === EstadoTesis.observaciones_emitidas ||
+      tesisEstado === EstadoTesis.observaciones_levantadas ||
+      tesisEstado === EstadoTesis.aprobado_jurado
+    ) {
+      return 'en_revision';
+    }
+
+    if (tesisEstado === EstadoTesis.expedito) {
+      return 'expedito';
+    }
+
+    if (
+      tesisEstado === EstadoTesis.sustentacion_programada ||
+      tesisEstado === EstadoTesis.sustentado
+    ) {
+      return 'sustentacion';
+    }
+
+    return 'tesista';
   }
 }

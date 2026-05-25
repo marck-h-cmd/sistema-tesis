@@ -157,4 +157,46 @@ export class EmpresasService {
       top_empresas_ofertas: ofertasPorEmpresa,
     };
   }
+
+  /** Convenio vigente: existe registro con estado vigente y fechas que cubren la fecha actual. */
+  async empresaTieneConvenioVigente(empresaId: number): Promise<boolean> {
+    const now = new Date();
+    const n = await this.prisma.convenio.count({
+      where: {
+        empresa_id: empresaId,
+        estado: 'vigente',
+        fecha_inicio: { lte: now },
+        fecha_fin: { gte: now },
+      },
+    });
+    return n > 0;
+  }
+
+  /** Cruza RUC con convenios vigentes (base interna de empresas/convenios). */
+  async validarConvenioPorRuc(ruc: string) {
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { ruc },
+    });
+
+    if (!empresa) {
+      return {
+        existe: false,
+        convenio_vigente: false,
+        requiere_convenio_especifico: true,
+        mensaje:
+          'Empresa no registrada. Debe darse de alta o solicitar convenio específico.',
+      };
+    }
+
+    const convenio_vigente = await this.empresaTieneConvenioVigente(empresa.id);
+
+    return {
+      existe: true,
+      empresa_id: empresa.id,
+      razon_social: empresa.razon_social,
+      ruc: empresa.ruc,
+      convenio_vigente,
+      requiere_convenio_especifico: !convenio_vigente,
+    };
+  }
 }

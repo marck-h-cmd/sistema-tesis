@@ -25,7 +25,6 @@ interface EstudianteData {
   usuario_id: number;
   codigo_universitario: string;
   escuela_id: number;
-  ciclo: string;
   usuario: { id: number; nombres: string; apellidos: string; email: string; dni: string };
   escuela: { id: number; nombre: string; facultad: string };
 }
@@ -284,7 +283,7 @@ export default function NuevaTesisPage() {
                               {miEstudiante.codigo_universitario} • {miEstudiante.escuela.nombre}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {miEstudiante.escuela.facultad} • {miEstudiante.ciclo} ciclo
+                              {miEstudiante.escuela.facultad}
                             </p>
                           </div>
                         </div>

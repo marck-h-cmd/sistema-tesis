@@ -8,7 +8,11 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { uploadPdf } from '@/lib/api/uploadPdf';
 import {
   Building2,
   MapPin,
@@ -28,6 +32,8 @@ export default function OfertaDetailPage() {
   const router = useRouter();
   const { hasRole, user } = useAuth();
   const [isPostulando, setIsPostulando] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [cvFile, setCvFile] = useState<File | null>(null);
 
   const ofertaId = parseInt(params.id as string);
 
@@ -38,25 +44,27 @@ export default function OfertaDetailPage() {
     enabled: !isNaN(ofertaId),
   });
 
-  // Verificar si el estudiante ya se postuló
+  // Verificar si el estudiante ya se postuló / cargar postulaciones (empresa y staff también las necesita)
   const { data: postulaciones, refetch: refetchPostulaciones } = useQuery({
     queryKey: ['postulacionesOferta', ofertaId],
     queryFn: () => ofertasApi.getPostulaciones(ofertaId).then(res => res.data.data),
-    enabled: hasRole('estudiante') && !!ofertaId,
+    enabled: (hasRole('estudiante') || hasRole('empresa') || hasRole('admin') || hasRole('coordinador') || hasRole('asesor')) && !!ofertaId,
   });
 
   const yaPostulo = postulaciones?.some(
     (p: any) => p.estudiante?.usuario_id === user?.id
   );
 
-  // Mutación para postular
+  console.log(yaPostulo)
+
   const postularMutation = useMutation({
-    mutationFn: async () => {
-      const response = await ofertasApi.postular(ofertaId, {}); // Body vacío porque el backend obtiene el estudiante del token
+    mutationFn: async (cv_url: string) => {
+      const response = await ofertasApi.postular(ofertaId, { cv_url }); 
       return response.data;
     },
     onSuccess: () => {
       toast.success('Postulación realizada exitosamente');
+      setIsModalOpen(false);
       refetch();
       refetchPostulaciones();
       router.push('/mis-postulaciones');
@@ -71,8 +79,39 @@ export default function OfertaDetailPage() {
   });
 
   const handlePostular = async () => {
+    if (!cvFile) {
+      toast.error('Por favor selecciona tu CV en formato PDF');
+      return;
+    }
+    
     setIsPostulando(true);
-    postularMutation.mutate();
+    try {
+      const result = await uploadPdf(cvFile);
+      postularMutation.mutate(result.url);
+    } catch (error) {
+      toast.error('Error al subir el CV');
+      setIsPostulando(false);
+    }
+  };
+
+  const updateEstadoMutation = useMutation({
+    mutationFn: async ({ postulacionId, estado }: { postulacionId: number, estado: string }) => {
+      const response = await ofertasApi.updateEstadoPostulacion(postulacionId, { estado });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Estado de la postulación actualizado');
+      refetch();
+      refetchPostulaciones();
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.message || 'Error al actualizar el estado';
+      toast.error(message);
+    }
+  });
+
+  const handleUpdateEstado = (postulacionId: number, estado: string) => {
+    updateEstadoMutation.mutate({ postulacionId, estado });
   };
 
   if (isLoading) {
@@ -187,22 +226,12 @@ export default function OfertaDetailPage() {
                   </div>
                 ) : isOfertaAbierta ? (
                   <Button
-                    onClick={handlePostular}
-                    disabled={postularMutation.isPending}
+                    onClick={() => setIsModalOpen(true)}
                     className="w-full md:w-auto"
                     size="lg"
                   >
-                    {postularMutation.isPending ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                        Procesando...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4 mr-2" />
-                        Postularme
-                      </>
-                    )}
+                    <Send className="h-4 w-4 mr-2" />
+                    Postularme
                   </Button>
                 ) : (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center">
@@ -215,10 +244,46 @@ export default function OfertaDetailPage() {
               </div>
             )}
 
-            {/* Mostrar postulaciones (solo para admin/coordinador/asesor) */}
-            {(hasRole('admin') || hasRole('coordinador') || hasRole('asesor')) && postulaciones && postulaciones.length > 0 && (
+            <Dialog open={isModalOpen} onClose={() => setIsModalOpen(false)} title="Postulación a Prácticas">
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Para postularte a esta oferta, necesitas subir tu Currículum Vitae (CV) en formato PDF.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="cv-upload">Currículum Vitae (PDF)</Label>
+                  <Input
+                    id="cv-upload"
+                    type="file"
+                    accept=".pdf"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setCvFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="pt-4 flex justify-end space-x-2">
+                  <Button variant="outline" onClick={() => setIsModalOpen(false)} disabled={isPostulando}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handlePostular} disabled={isPostulando || !cvFile}>
+                    {isPostulando ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                        Subiendo...
+                      </>
+                    ) : (
+                      'Confirmar Postulación'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </Dialog>
+
+            {/* Mostrar postulaciones (solo para admin/coordinador/asesor/empresa) */}
+            {(hasRole('admin') || hasRole('coordinador') || hasRole('asesor') || hasRole('empresa')) && postulaciones && postulaciones.length > 0 && (
               <div className="mt-8 pt-6 border-t">
-                <h2 className="text-xl font-semibold mb-4">Postulaciones</h2>
+                <h2 className="text-xl font-semibold mb-4">Postulaciones Recibidas</h2>
                 <div className="space-y-3">
                   {postulaciones.map((postulacion: any) => (
                     <div key={postulacion.id} className="bg-gray-50 rounded-lg p-4">
@@ -233,15 +298,49 @@ export default function OfertaDetailPage() {
                           <p className="text-sm text-gray-600">
                             Escuela: {postulacion.estudiante?.escuela?.nombre}
                           </p>
+                          {postulacion.cv_url && (
+                            <a 
+                              href={`http://localhost:4000${postulacion.cv_url}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-sm text-primary hover:underline flex items-center mt-1"
+                            >
+                              Ver Currículum Vitae
+                            </a>
+                          )}
                         </div>
-                        <Badge className={
-                          postulacion.estado === 'postulado' ? 'bg-yellow-100 text-yellow-800' :
-                          postulacion.estado === 'aceptado' ? 'bg-green-100 text-green-800' :
-                          postulacion.estado === 'rechazado' ? 'bg-red-100 text-red-800' :
-                          'bg-blue-100 text-blue-800'
-                        }>
-                          {postulacion.estado}
-                        </Badge>
+                        <div className="flex flex-col items-end space-y-2">
+                          <Badge className={
+                            postulacion.estado === 'postulado' ? 'bg-yellow-100 text-yellow-800' :
+                            postulacion.estado === 'aceptado' ? 'bg-green-100 text-green-800' :
+                            postulacion.estado === 'rechazado' ? 'bg-red-100 text-red-800' :
+                            'bg-blue-100 text-blue-800'
+                          }>
+                            {postulacion.estado}
+                          </Badge>
+                          {(hasRole('empresa') || hasRole('admin')) && postulacion.estado === 'postulado' && (
+                            <div className="flex space-x-2 mt-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="border-green-500 text-green-600 hover:bg-green-50"
+                                onClick={() => handleUpdateEstado(postulacion.id, 'aceptado')}
+                                disabled={updateEstadoMutation.isPending}
+                              >
+                                Aceptar
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="border-red-500 text-red-600 hover:bg-red-50"
+                                onClick={() => handleUpdateEstado(postulacion.id, 'rechazado')}
+                                disabled={updateEstadoMutation.isPending}
+                              >
+                                Rechazar
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}

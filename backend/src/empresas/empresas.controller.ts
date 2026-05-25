@@ -27,56 +27,70 @@ export class EmpresasController {
   ) {}
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria)
   async findAll() {
     const empresas = await this.empresasService.findAll();
     return { data: empresas };
   }
 
   @Get('estadisticas')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async getEstadisticas() {
     const estadisticas = await this.empresasService.getEstadisticas();
     return { data: estadisticas };
   }
 
+  /** Validación de convenio por RUC (empresa ingresada / oferta). */
+  @Get('validar-convenio/ruc/:ruc')
+  @Roles(
+    RolNombre.admin,
+    RolNombre.coordinador,
+    RolNombre.estudiante,
+    RolNombre.asesor,
+    RolNombre.secretaria,
+  )
+  async validarConvenioPorRuc(@Param('ruc') ruc: string) {
+    const data = await this.empresasService.validarConvenioPorRuc(ruc);
+    return { data };
+  }
+
   @Get(':id')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria)
   async findOne(@Param('id') id: string) {
     const empresa = await this.empresasService.findOne(+id);
     return { data: empresa };
   }
 
   @Post()
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async create(@Body() createEmpresaDto: CreateEmpresaDto) {
     const empresa = await this.empresasService.create(createEmpresaDto);
     return { data: empresa, message: 'Empresa creada exitosamente' };
   }
 
   @Put(':id')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async update(@Param('id') id: string, @Body() updateEmpresaDto: UpdateEmpresaDto) {
     const empresa = await this.empresasService.update(+id, updateEmpresaDto);
     return { data: empresa, message: 'Empresa actualizada exitosamente' };
   }
 
   @Delete(':id')
-  @Roles(RolNombre.admin)
+  @Roles(RolNombre.admin, RolNombre.secretaria)
   async remove(@Param('id') id: string) {
     await this.empresasService.remove(+id);
     return { message: 'Empresa eliminada exitosamente' };
   }
 
   @Get(':id/convenios')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async getConvenios(@Param('id') id: string) {
     const convenios = await this.empresasService.getConvenios(+id);
     return { data: convenios };
   }
 
   @Post(':id/convenios')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async createConvenio(
     @Param('id') id: string,
     @Body() createConvenioDto: CreateConvenioDto,

@@ -15,6 +15,9 @@ import {
   LogOut,
   ChevronLeft,
   CheckCircle,
+  ClipboardList,
+  Wallet,
+  Scale,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -24,14 +27,36 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'coordinador'] },
-  { href: 'revision-avances', label: 'Revisión Avances', icon: CheckCircle, roles: ['admin', 'asesor', 'coordinador'] },
-  { href: '/practicas', label: 'Prácticas', icon: Briefcase, roles: ['admin', 'coordinador', 'asesor', 'estudiante', 'empresa'] },
-  { href: '/tesis', label: 'Tesis', icon: GraduationCap, roles: ['admin', 'coordinador', 'asesor', 'estudiante'] },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'coordinador', 'secretaria'] },
+  
+  {
+    href: '/gestion-pagos',
+    label: 'Pagos y documentos (tesis)',
+    icon: Wallet,
+    roles: ['secretaria', 'admin', 'coordinador'],
+  },
+  { href: '/revision-avances', label: 'Revisión Avances', icon: CheckCircle, roles: ['admin', 'asesor', 'coordinador'] },
+  {
+    href: '/revision-conformidad-jurado',
+    label: 'Revisión jurado (conformidad)',
+    icon: Scale,
+    roles: ['asesor', 'coordinador', 'admin'],
+  },
+  { href: '/practicas', label: 'Prácticas', icon: Briefcase, roles: ['admin', 'coordinador', 'secretaria', 'asesor', 'estudiante', 'empresa'] },
+  {
+    href: '/validacion-practicas',
+    label: 'Validación prácticas',
+    icon: ClipboardList,
+    roles: ['secretaria', 'admin', 'asesor'],
+  },
+  { href: '/tesis', label: 'Tesis', icon: GraduationCap, roles: ['admin', 'coordinador', 'secretaria', 'asesor', 'estudiante'] },
   { href: '/mis-postulaciones', label: 'Mis Postulaciones', icon: Briefcase, roles: ['estudiante'] },
-  { href: '/estudiantes', label: 'Estudiantes', icon: Users, roles: ['admin', 'coordinador', 'asesor'] },
-  { href: '/empresas', label: 'Empresas', icon: Building2, roles: ['admin', 'coordinador', 'estudiante'] },
-  { href: '/reportes', label: 'Reportes', icon: FileText, roles: ['admin', 'coordinador'] },
+  { href: '/mis-pagos', label: 'Mis pagos', icon: Wallet, roles: ['estudiante'] },
+  { href: '/estudiantes', label: 'Estudiantes', icon: Users, roles: ['admin', 'coordinador', 'asesor', 'secretaria'] },
+  { href: '/empresas', label: 'Empresas', icon: Building2, roles: ['admin', 'coordinador', 'estudiante', 'secretaria'] },
+  { href: '/reportes', label: 'Reportes', icon: FileText, roles: ['admin', 'coordinador', 'secretaria'] },
+  { href: '/postulaciones-empresa', label: 'Postulaciones a mis practicas', icon: Briefcase, roles: [  'empresa','admin','secretaria'] },
+  { href: '/asignar-asesor', label: 'Asignar Asesor', icon: Users, roles: ['admin', 'coordinador'] },
 ];
 
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {

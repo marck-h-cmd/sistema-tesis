@@ -8,6 +8,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ──────────────────────────────────────────────
+// ENUMS DEL SISTEMA
+// ──────────────────────────────────────────────
+
+enum RolNombre {
+  admin
+  coordinador
+  secretaria
+  asesor
+  estudiante
+  empresa
+}
+
+// Estado derivado del flujo de prácticas
+enum EstadoPractica {
+  plan_pendiente           // Espera OK de Secretaría al Plan de Prácticas
+  plan_validado            // Secretaría marcó OK
+  en_ejecucion             // Estudiante subiendo reportes mensuales
+  informe_pendiente        // Horas completadas, espera firma del Asesor
+  aprobado                 // Asesor firmó informe final
+}
+
+// Estado de la tesis en el flujo completo
+enum EstadoTesis {
+  propuesta
+  desarrollo
+  en_revision              // Jurado está revisando
+  observaciones_emitidas   // Jurado puso observaciones, alumno debe corregir
+  observaciones_levantadas // Alumno subió versión corregida
+  aprobado_jurado          // Todos los jurados marcaron "Conforme"
+  expedito                 // Validación final: pagos OK, docs OK, prácticas OK
+  sustentacion_programada
+  sustentado
+  culminado
+}
+
 enum EstadoPostulacion {
   postulado
   aceptado
@@ -16,20 +52,52 @@ enum EstadoPostulacion {
   finalizado
 }
 
-enum EstadoTesis {
-  propuesta
-  desarrollo
-  sustentacion
-  culminado
+enum EstadoConvenioEspecifico {
+  no_aplica
+  pendiente
+  en_tramite
+  aprobado
+  rechazado
 }
 
-enum RolNombre {
-  admin
-  coordinador
-  asesor
-  estudiante
-  empresa
+enum EstadoPago {
+  pendiente
+  comprobante_cargado
+  verificado              // Admin marcó como "Pagado"
+  rechazado
 }
+
+enum EstadoRevisionJurado {
+  pendiente
+  observaciones           // Tiene observaciones
+  conforme                // Jurado marcó conforme
+}
+
+enum TipoDocumentoPractica {
+  plan_practicas
+  informe_final
+  acta_aprobacion_asesor
+  resolucion_facultad
+}
+
+enum TipoDocumentoTesis {
+  tesis_final
+  anexos
+  recibo_turnitin
+  comprobante_pago
+  version_corregida
+  carta_conformidad_jurado
+}
+
+enum TipoPago {
+  turnitin
+  carpeta_tesis
+  derecho_sustentacion
+}
+
+// ──────────────────────────────────────────────
+// MODELOS PRINCIPALES
+// ──────────────────────────────────────────────
 
 model Rol {
   id          Int          @id @default(autoincrement())
@@ -39,20 +107,21 @@ model Rol {
 }
 
 model Usuario {
-  id          Int          @id @default(autoincrement())
-  email       String       @unique
-  password    String       @map("password_hash")
-  nombres     String
-  apellidos   String
-  dni         String       @unique
-  telefono    String?
-  activo      Boolean      @default(true)
-  created_at  DateTime     @default(now())
-  updated_at  DateTime     @updatedAt
-  roles       UsuarioRol[]
-  estudiante  Estudiante?
-  asesor      Asesor?
-  reportes    Reporte[]
+  id             Int            @id @default(autoincrement())
+  email          String         @unique
+  password       String         @map("password_hash")
+  nombres        String
+  apellidos      String
+  dni            String         @unique
+  telefono       String?
+  activo         Boolean        @default(true)
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+  roles          UsuarioRol[]
+  estudiante     Estudiante?
+  asesor         Asesor?
+  reportes       Reporte[]
+  notificaciones Notificacion[]
 
   @@map("usuario")
 }
@@ -78,21 +147,259 @@ model Escuela {
   @@map("escuela")
 }
 
+// ──────────────────────────────────────────────
+// ESTUDIANTE - Solo datos de identidad y relaciones
+// ──────────────────────────────────────────────
+
 model Estudiante {
-  id                   Int           @id @default(autoincrement())
-  usuario_id           Int           @unique
-  codigo_universitario String        @unique
+  id                   Int      @id @default(autoincrement())
+  usuario_id           Int      @unique
+  codigo_universitario String   @unique
   escuela_id           Int
-  ciclo                String?
-  resolucion_practicas String?
-  created_at           DateTime      @default(now())
-  usuario              Usuario       @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
-  escuela              Escuela       @relation(fields: [escuela_id], references: [id])
+  
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  
+  usuario              Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  escuela              Escuela  @relation(fields: [escuela_id], references: [id])
+  
   postulaciones        Postulacion[]
+  practicas            Practica[]
   tesis                Tesis[]
+  pagos                Pago[]
 
   @@map("estudiante")
 }
+
+// ──────────────────────────────────────────────
+// MÓDULO DE PRÁCTICAS - Dueño de sus fechas y estados
+// ──────────────────────────────────────────────
+
+model Practica {
+  id                        Int              @id @default(autoincrement())
+  estudiante_id             Int
+  postulacion_id            Int              @unique
+  asesor_id                 Int?
+  
+  estado                    EstadoPractica   @default(plan_pendiente)
+  
+  // Hito 1: Plan de Prácticas (Secretaría)
+  plan_practicas_url        String?
+  plan_practicas_subido_en  DateTime?
+  plan_validado             Boolean          @default(false)
+  plan_validado_por         Int?
+  plan_validado_en          DateTime?
+  plan_observaciones        String?
+  
+  // Hito 2: Ejecución - Fechas propias de la práctica
+  fecha_inicio              DateTime?
+  fecha_fin_estimada        DateTime?
+  horas_cumplidas           Int              @default(0)
+  horas_totales             Int              @default(300)
+  
+  // Hito 3: Informe Final (Asesor)
+  informe_final_url         String?
+  informe_final_subido_en   DateTime?
+  informe_aprobado          Boolean          @default(false)
+  informe_aprobado_en       DateTime?
+  informe_aprobado_por      Int?
+  informe_observaciones     String?
+  
+  // Hito 4: Resolución de Facultad (Administrativo)
+  resolucion_numero         String?
+  resolucion_url            String?
+  resolucion_cargado_en     DateTime?
+  resolucion_cargado_por    Int?
+  
+  created_at                DateTime         @default(now())
+  updated_at                DateTime         @updatedAt
+  
+  estudiante                Estudiante       @relation(fields: [estudiante_id], references: [id], onDelete: Cascade)
+  postulacion               Postulacion      @relation(fields: [postulacion_id], references: [id], onDelete: Cascade)
+  asesor                    Asesor?          @relation(fields: [asesor_id], references: [id])
+  
+  reportes_mensuales        ReporteMensualPractica[]
+  documentos                DocumentoPractica[]
+  
+  @@map("practica")
+}
+
+model DocumentoPractica {
+  id              Int                 @id @default(autoincrement())
+  practica_id     Int
+  tipo            TipoDocumentoPractica
+  archivo_url     String
+  nombre_original String?
+  subido_por      Int
+  subido_en       DateTime            @default(now())
+  validado        Boolean             @default(false)
+  validado_por    Int?
+  validado_en     DateTime?
+  observaciones   String?
+  
+  practica        Practica            @relation(fields: [practica_id], references: [id], onDelete: Cascade)
+  
+  @@map("documento_practica")
+}
+
+model ReporteMensualPractica {
+  id               Int      @id @default(autoincrement())
+  practica_id      Int
+  anio             Int
+  mes              Int
+  horas_reportadas Int
+  archivo_url      String?
+  observaciones    String?
+  validado         Boolean  @default(false)
+  validado_por     Int?
+  validado_en      DateTime?
+  observaciones_asesor String?
+  created_at       DateTime @default(now())
+  practica         Practica @relation(fields: [practica_id], references: [id], onDelete: Cascade)
+
+  @@unique([practica_id, anio, mes])
+  @@map("reporte_mensual_practica")
+}
+
+// ──────────────────────────────────────────────
+// MÓDULO DE TESIS - Dueña de su timeline
+// ──────────────────────────────────────────────
+
+model Tesis {
+  id                          Int          @id @default(autoincrement())
+  titulo                      String
+  resumen                     String?
+  estudiante_id               Int
+  asesor_principal_id         Int
+  
+  estado                      EstadoTesis  @default(propuesta)
+  
+  // Timeline de la tesis
+  fecha_inicio                DateTime?
+  fecha_recepcion_documentos  DateTime?     // Fecha estampada al subir tesis final
+  fecha_limite_sustentacion   DateTime?     // Plazo máximo para sustentar
+  fecha_sustentacion          DateTime?     // Fecha asignada por coordinador/secretaría
+  
+  // Turnitin
+  recibo_turnitin_url              String?
+  recibo_turnitin_cargado_en       DateTime?
+  similitud_turnitin               Decimal?     @db.Decimal(5, 2)
+  similitud_registrada_en          DateTime?
+  similitud_registrada_por_asesor_id Int?
+  
+  updated_at                  DateTime     @updatedAt
+  created_at                  DateTime     @default(now())
+  
+  estudiante                  Estudiante   @relation(fields: [estudiante_id], references: [id], onDelete: Cascade)
+  asesor_principal            Asesor       @relation("AsesorPrincipal", fields: [asesor_principal_id], references: [id])
+  
+  documentos                  DocumentoTesis[]
+  pagos                       PagoTesis[]
+  jurados                     JuradoTesis[]
+  avances                     AvanceTesis[]
+  acta                        ActaSustentacion?
+  
+  @@map("tesis")
+}
+
+model DocumentoTesis {
+  id              Int                @id @default(autoincrement())
+  tesis_id        Int
+  tipo            TipoDocumentoTesis
+  archivo_url     String
+  nombre_original String?
+  version         Int                @default(1)
+  subido_por      Int
+  subido_en       DateTime           @default(now())   // Fecha de Recepción automática
+  validado        Boolean            @default(false)
+  validado_por    Int?
+  validado_en     DateTime?
+  observaciones   String?
+  
+  tesis           Tesis              @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
+  
+  @@map("documento_tesis")
+}
+
+// ──────────────────────────────────────────────
+// MÓDULO DE PAGOS
+// ──────────────────────────────────────────────
+
+model Pago {
+  id               Int        @id @default(autoincrement())
+  estudiante_id    Int
+  tipo             TipoPago
+  monto            Decimal    @db.Decimal(10, 2)
+  estado           EstadoPago @default(pendiente)
+  comprobante_url  String?
+  comprobante_subido_en DateTime?
+  verificado_por   Int?
+  verificado_en    DateTime?
+  observaciones    String?
+  created_at       DateTime   @default(now())
+  
+  estudiante       Estudiante @relation(fields: [estudiante_id], references: [id], onDelete: Cascade)
+  
+  @@map("pago")
+}
+
+model PagoTesis {
+  id               Int        @id @default(autoincrement())
+  tesis_id         Int
+  tipo             TipoPago
+  monto            Decimal    @db.Decimal(10, 2)
+  estado           EstadoPago @default(pendiente)
+  comprobante_url  String?
+  comprobante_subido_en DateTime?
+  verificado_por   Int?
+  verificado_en    DateTime?
+  observaciones    String?
+  created_at       DateTime   @default(now())
+  
+  tesis            Tesis      @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
+  
+  @@map("pago_tesis")
+}
+
+// ──────────────────────────────────────────────
+// MÓDULO DE EVALUACIÓN - Flujo del Jurado
+// ──────────────────────────────────────────────
+
+model JuradoTesis {
+  id         Int               @id @default(autoincrement())
+  tesis_id   Int
+  asesor_id  Int
+  rol        String            // presidente, secretario, vocal
+  asignado_en DateTime         @default(now())
+  
+  tesis      Tesis             @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
+  asesor     Asesor            @relation(fields: [asesor_id], references: [id])
+  revisiones RevisionJurado[]
+  
+  @@unique([tesis_id, rol])
+  @@map("jurado_tesis")
+}
+
+model RevisionJurado {
+  id                    Int                  @id @default(autoincrement())
+  jurado_tesis_id       Int
+  estado                EstadoRevisionJurado @default(pendiente)
+  observaciones         String?
+  archivo_correciones_url String?
+  conforme              Boolean             @default(false)
+  revisado_en           DateTime?
+  version_documento     Int                 @default(1)
+  created_at            DateTime            @default(now())
+  updated_at            DateTime            @updatedAt
+  
+  jurado_tesis          JuradoTesis         @relation(fields: [jurado_tesis_id], references: [id], onDelete: Cascade)
+  
+  @@map("revision_jurado")
+}
+
+// ──────────────────────────────────────────────
+// MODELOS DE SOPORTE
+// ──────────────────────────────────────────────
 
 model Asesor {
   id                      Int                 @id @default(autoincrement())
@@ -104,6 +411,7 @@ model Asesor {
   escuela                 Escuela             @relation(fields: [escuela_id], references: [id])
   postulaciones           AsesorPostulacion[]
   postulacionesAcademicas Postulacion[]       @relation("AsesorPostulacionRelation")
+  practicasAsesoradas     Practica[]
   tesisAsesorPrincipal    Tesis[]             @relation("AsesorPrincipal")
   juradoTesis             JuradoTesis[]
 
@@ -159,18 +467,21 @@ model OfertaPractica {
 }
 
 model Postulacion {
-  id                  Int                  @id @default(autoincrement())
-  oferta_id           Int
-  estudiante_id       Int
-  asesor_academico_id Int?
-  fecha_postulacion   DateTime             @default(now()) @db.Date
-  estado              EstadoPostulacion    @default(postulado)
-  created_at          DateTime             @default(now())
-  oferta              OfertaPractica       @relation(fields: [oferta_id], references: [id], onDelete: Cascade)
-  estudiante          Estudiante           @relation(fields: [estudiante_id], references: [id], onDelete: Cascade)
-  asesor_academico    Asesor?              @relation("AsesorPostulacionRelation", fields: [asesor_academico_id], references: [id])
-  asesorPostulacion   AsesorPostulacion?
-  seguimiento         SeguimientoPractica?
+  id                           Int                     @id @default(autoincrement())
+  oferta_id                    Int
+  estudiante_id                Int
+  asesor_academico_id          Int?
+  cv_url                       String?                 // PDF del CV subido por el estudiante
+  fecha_postulacion            DateTime                @default(now()) @db.Date
+  estado                       EstadoPostulacion       @default(postulado)
+  requiere_convenio_especifico Boolean                 @default(false)
+  estado_convenio_especifico   EstadoConvenioEspecifico @default(no_aplica)
+  created_at                   DateTime                @default(now())
+  oferta                       OfertaPractica          @relation(fields: [oferta_id], references: [id], onDelete: Cascade)
+  estudiante                   Estudiante              @relation(fields: [estudiante_id], references: [id], onDelete: Cascade)
+  asesor_academico             Asesor?                 @relation("AsesorPostulacionRelation", fields: [asesor_academico_id], references: [id])
+  asesorPostulacion            AsesorPostulacion?
+  practica                     Practica?
 
   @@map("postulacion")
 }
@@ -184,52 +495,6 @@ model AsesorPostulacion {
   postulacion    Postulacion @relation(fields: [postulacion_id], references: [id], onDelete: Cascade)
 
   @@map("asesor_postulacion")
-}
-
-model SeguimientoPractica {
-  id                 Int         @id @default(autoincrement())
-  postulacion_id     Int         @unique
-  horas_cumplidas    Int         @default(0)
-  horas_totales      Int         @default(300)
-  informe_estudiante String?
-  informe_asesor     String?
-  evaluacion         String      @default("pendiente")
-  fecha_evaluacion   DateTime?   @db.Date
-  created_at         DateTime    @default(now())
-  postulacion        Postulacion @relation(fields: [postulacion_id], references: [id], onDelete: Cascade)
-
-  @@map("seguimiento_practica")
-}
-
-model Tesis {
-  id                  Int               @id @default(autoincrement())
-  titulo              String
-  resumen             String?
-  estudiante_id       Int
-  asesor_principal_id Int
-  estado              EstadoTesis       @default(propuesta)
-  fecha_inicio        DateTime?         @db.Date
-  fecha_sustentacion  DateTime?         @db.Date
-  created_at          DateTime          @default(now())
-  estudiante          Estudiante        @relation(fields: [estudiante_id], references: [id], onDelete: Cascade)
-  asesor_principal    Asesor            @relation("AsesorPrincipal", fields: [asesor_principal_id], references: [id])
-  jurados             JuradoTesis[]
-  avances             AvanceTesis[]
-  acta                ActaSustentacion?
-
-  @@map("tesis")
-}
-
-model JuradoTesis {
-  id        Int    @id @default(autoincrement())
-  tesis_id  Int
-  asesor_id Int
-  rol       String
-  tesis     Tesis  @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
-  asesor    Asesor @relation(fields: [asesor_id], references: [id])
-
-  @@unique([tesis_id, rol])
-  @@map("jurado_tesis")
 }
 
 model AvanceTesis {
@@ -247,16 +512,30 @@ model AvanceTesis {
 }
 
 model ActaSustentacion {
-  id               Int      @id @default(autoincrement())
-  tesis_id         Int      @unique
-  fecha            DateTime @db.Date
-  lugar            String?
-  nota_final       Float?
-  archivo_acta_pdf String?
-  created_at       DateTime @default(now())
-  tesis            Tesis    @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
+  id                   Int      @id @default(autoincrement())
+  tesis_id             Int      @unique
+  fecha                DateTime @db.Date
+  lugar                String?
+  nota_final           Float?
+  archivo_acta_pdf     String?
+  calificaciones_jurado Json?
+  created_at           DateTime @default(now())
+  tesis                Tesis    @relation(fields: [tesis_id], references: [id], onDelete: Cascade)
 
   @@map("acta_sustentacion")
+}
+
+model Notificacion {
+  id         Int      @id @default(autoincrement())
+  usuario_id Int
+  titulo     String
+  mensaje    String
+  leida      Boolean  @default(false)
+  metadata   Json?
+  created_at DateTime @default(now())
+  usuario    Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@map("notificacion")
 }
 
 model Reporte {

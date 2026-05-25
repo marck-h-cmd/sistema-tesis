@@ -11,6 +11,10 @@ import { GraduationCap, Eye, EyeOff } from 'lucide-react';
 const TEST_CREDENTIALS = [
   { label: 'Admin', email: 'admin@unitru.edu.pe', password: 'Admin123@' },
   { label: 'Estudiante', email: 'carlos.lopez@unitru.edu.pe', password: 'Estu123@' },
+  { label: 'Asesor', email: 'juan.garcia@unitru.edu.pe', password: 'Asesor123@' },
+  { label: 'Secretaria', email: 'secretaria.sistemas@unitru.edu.pe', password: 'Secre123@' },
+  { label: 'Empresa', email: 'rrhh@techcorp.com', password: 'Empresa123@' },
+  { label: 'Coordinador', email: 'coordinador.sistemas@unitru.edu.pe', password: 'Coord123@' }
 ];
 
 export default function LoginPage() {

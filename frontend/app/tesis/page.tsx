@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { tesisApi, estudiantesApi } from '@/lib/api/endpoints';
+import { tesisApi, estudiantesApi, asesoresApi } from '@/lib/api/endpoints';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,14 +20,20 @@ import {
   Edit
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils/formatDate';
-import { TesisEditForm } from '@/components/forms/TesisEditForm';
+import { TesisEditForm, type TesisEditSubmitPayload } from '@/components/forms/TesisEditForm';
 import { Dialog } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
 const estadosTesis: Record<string, { color: string; label: string }> = {
   propuesta: { color: 'bg-blue-100 text-blue-800', label: 'Propuesta' },
-  desarrollo: { color: 'bg-yellow-100 text-yellow-800', label: 'En Desarrollo' },
-  sustentacion: { color: 'bg-purple-100 text-purple-800', label: 'En Sustentación' },
+  desarrollo: { color: 'bg-yellow-100 text-yellow-800', label: 'En desarrollo' },
+  en_revision: { color: 'bg-amber-100 text-amber-900', label: 'En revisión (jurado)' },
+  observaciones_emitidas: { color: 'bg-orange-100 text-orange-900', label: 'Observaciones jurado' },
+  observaciones_levantadas: { color: 'bg-cyan-100 text-cyan-900', label: 'Correcciones cargadas' },
+  aprobado_jurado: { color: 'bg-indigo-100 text-indigo-900', label: 'Aprobado por jurado' },
+  expedito: { color: 'bg-emerald-100 text-emerald-900', label: 'Expedito' },
+  sustentacion_programada: { color: 'bg-purple-100 text-purple-900', label: 'Sustentación programada' },
+  sustentado: { color: 'bg-violet-100 text-violet-900', label: 'Sustentado' },
   culminado: { color: 'bg-green-100 text-green-800', label: 'Culminado' },
 };
 
@@ -36,8 +42,7 @@ export default function TesisPage() {
   const [editingTesis, setEditingTesis] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const { hasRole, user } = useAuth();
-
-  console.log("user",user);
+  const adminEdit = hasRole('admin') || hasRole('coordinador');
 
   // Query para obtener el estudiante si el usuario es estudiante
   const { data: estudiante, isLoading: isLoadingEstudiante } = useQuery({
@@ -70,12 +75,32 @@ export default function TesisPage() {
     enabled: !hasRole('estudiante') || (hasRole('estudiante') && !!estudiante?.id),
   });
 
-  const handleEditTesis = async (data: any) => {
+  const { data: asesoresList } = useQuery({
+    queryKey: ['asesores', 'tesis-edit'],
+    queryFn: () => asesoresApi.getAll().then((res) => res.data.data),
+    enabled: adminEdit,
+  });
+
+  const asesorOptions =
+    asesoresList?.map((a: any) => ({
+      id: a.id,
+      label: `${a.usuario?.nombres ?? ''} ${a.usuario?.apellidos ?? ''}`.trim() || `Asesor #${a.id}`,
+    })) ?? [];
+
+  const handleEditTesis = async (payload: TesisEditSubmitPayload) => {
     if (!editingTesis) return;
 
     setIsEditing(true);
     try {
-      await tesisApi.update(editingTesis.id, data);
+      if (payload.mode === 'admin') {
+        await tesisApi.updateAdmin(editingTesis.id, payload.data);
+      } else {
+        const data = payload.data;
+        const body: Record<string, unknown> = { titulo: data.titulo };
+        if (data.resumen !== undefined) body.resumen = data.resumen || null;
+        if (data.fecha_inicio) body.fecha_inicio = data.fecha_inicio;
+        await tesisApi.update(editingTesis.id, body);
+      }
       toast.success('Tesis actualizada exitosamente');
       setEditingTesis(null);
       refetch();
@@ -276,6 +301,8 @@ export default function TesisPage() {
         {editingTesis && (
           <TesisEditForm
             tesis={editingTesis}
+            adminMode={adminEdit}
+            asesores={asesorOptions}
             onSubmit={handleEditTesis}
             onCancel={closeEditModal}
             isLoading={isEditing}

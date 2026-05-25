@@ -131,7 +131,6 @@ export class AuthService {
             usuario_id: user.id,
             escuela_id: escuelaId,
             codigo_universitario: codigoUniversitario,
-            ciclo: registerDto.ciclo ?? null,
           },
         });
       }

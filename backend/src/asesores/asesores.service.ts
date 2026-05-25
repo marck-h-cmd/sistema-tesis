@@ -164,7 +164,7 @@ export class AsesoresService {
                 empresa: true,
               },
             },
-            seguimiento: true,
+            practica: true,
           },
         },
       },

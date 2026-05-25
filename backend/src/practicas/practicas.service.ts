@@ -1,0 +1,1088 @@
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateSeguimientoDto } from '../seguimiento/dto/create-seguimiento.dto';
+import { UpdateSeguimientoDto } from '../seguimiento/dto/update-seguimiento.dto';
+import { CreateReporteMensualDto } from '../seguimiento/dto/create-reporte-mensual.dto';
+import {
+  EstadoPostulacion,
+  EstadoPractica,
+  RolNombre,
+  TipoDocumentoPractica,
+} from '@prisma/client';
+import { ValidarPlanDto } from './dto/validar-plan.dto';
+import { AprobarInformeDto } from './dto/aprobar-informe.dto';
+import { UpdatePracticaAdminDto } from './dto/update-practica-admin.dto';
+import { ValidarDocumentoPracticaDto } from './dto/validar-documento-practica.dto';
+
+
+const practicaFullInclude = {
+  estudiante: {
+    include: {
+      usuario: {
+        select: {
+          id: true,
+          nombres: true,
+          apellidos: true,
+          email: true,
+        },
+      },
+      escuela: {
+        select: {
+          nombre: true,
+          facultad: true,
+        },
+      },
+    },
+  },
+  postulacion: {
+    include: {
+      oferta: {
+        include: {
+          empresa: {
+            select: {
+              id: true,
+              razon_social: true,
+            },
+          },
+        },
+      },
+      asesor_academico: {
+        include: {
+          usuario: {
+            select: {
+              nombres: true,
+              apellidos: true,
+            },
+          },
+        },
+      },
+    },
+  },
+  asesor: {
+    include: {
+      usuario: {
+        select: {
+          id: true,
+          nombres: true,
+          apellidos: true,
+        },
+      },
+    },
+  },
+} as const;
+
+@Injectable()
+export class PracticasService {
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {}
+
+  async findAll(filters?: { estado?: string; asesor_id?: number }) {
+    const where: Record<string, unknown> = {};
+
+    if (filters?.asesor_id) {
+      where.asesor_id = filters.asesor_id;
+    }
+
+    if (filters?.estado) {
+      where.estado = filters.estado;
+    }
+
+    return this.prisma.practica.findMany({
+      where,
+      include: practicaFullInclude,
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async findPendientesAsignacionAsesor() {
+    return this.prisma.practica.findMany({
+      where: {
+        asesor_id: null,
+        estado: {
+          in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado],
+        },
+        postulacion: {
+          estado: EstadoPostulacion.aceptado,
+        },
+      },
+      include: practicaFullInclude,
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async asignarAsesor(practicaId: number, asesorId: number) {
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { id: asesorId },
+      select: { id: true },
+    });
+    if (!asesor) {
+      throw new NotFoundException(`Asesor con ID ${asesorId} no encontrado`);
+    }
+
+    const practica = await this.prisma.practica.findUnique({
+      where: { id: practicaId },
+      select: {
+        id: true,
+        asesor_id: true,
+        estado: true,
+        postulacion_id: true,
+        postulacion: {
+          select: {
+            id: true,
+            estado: true,
+          },
+        },
+      },
+    });
+
+    if (!practica) {
+      throw new NotFoundException(`Práctica con ID ${practicaId} no encontrada`);
+    }
+
+    if (practica.asesor_id) {
+      throw new ConflictException('La práctica ya tiene asesor asignado');
+    }
+
+    if (
+      practica.postulacion.estado !== EstadoPostulacion.aceptado &&
+      practica.postulacion.estado !== EstadoPostulacion.en_curso
+    ) {
+      throw new ConflictException('La postulación no está activa');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.asesorPostulacion.upsert({
+        where: { postulacion_id: practica.postulacion_id },
+        update: { asesor_id: asesorId },
+        create: { postulacion_id: practica.postulacion_id, asesor_id: asesorId },
+      });
+
+      await tx.postulacion.update({
+        where: { id: practica.postulacion_id },
+        data: {
+          asesor_academico_id: asesorId,
+          ...(practica.postulacion.estado === EstadoPostulacion.aceptado && {
+            estado: EstadoPostulacion.en_curso,
+          }),
+        },
+      });
+
+      await tx.practica.update({
+        where: { id: practicaId },
+        data: {
+          asesor_id: asesorId,
+          ...(practica.estado === EstadoPractica.plan_pendiente ||
+          practica.estado === EstadoPractica.plan_validado
+            ? { estado: EstadoPractica.en_ejecucion }
+            : {}),
+        },
+      });
+    });
+
+    return this.prisma.practica.findUnique({
+      where: { id: practicaId },
+      include: practicaFullInclude,
+    });
+  }
+
+  async findOne(id: number) {
+    const practica = await this.prisma.practica.findUnique({
+      where: { id },
+      include: {
+        ...practicaFullInclude,
+        documentos: { orderBy: { subido_en: 'desc' } },
+        reportes_mensuales: {
+          orderBy: [{ anio: 'desc' }, { mes: 'desc' }],
+        },
+      },
+    });
+
+    if (!practica) {
+      throw new NotFoundException(`Práctica con ID ${id} no encontrada`);
+    }
+
+    return practica;
+  }
+
+  async findByPostulacion(postulacionId: number) {
+    const practica = await this.prisma.practica.findUnique({
+      where: { postulacion_id: postulacionId },
+      include: practicaFullInclude,
+    });
+
+    if (!practica) {
+      throw new NotFoundException(
+        `No hay registro de práctica para la postulación ${postulacionId}`,
+      );
+    }
+
+    return practica;
+  }
+
+  async findByEstudiante(estudianteId: number) {
+    return this.prisma.practica.findMany({
+      where: { estudiante_id: estudianteId },
+      include: practicaFullInclude,
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  /** Crear ficha de práctica manual (normalmente se crea al aceptar la postulación). */
+  async create(createDto: CreateSeguimientoDto) {
+    const existing = await this.prisma.practica.findUnique({
+      where: { postulacion_id: createDto.postulacion_id },
+    });
+
+    if (existing) {
+      throw new ConflictException('Ya existe práctica para esta postulación');
+    }
+
+    const postulacion = await this.prisma.postulacion.findUnique({
+      where: { id: createDto.postulacion_id },
+    });
+
+    if (
+      !postulacion ||
+      (postulacion.estado !== EstadoPostulacion.aceptado &&
+        postulacion.estado !== EstadoPostulacion.en_curso)
+    ) {
+      throw new ConflictException(
+        'La postulación no está activa para registrar práctica',
+      );
+    }
+
+    const horasTotales =
+      createDto.horas_totales ??
+      this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
+      300;
+
+    return this.prisma.practica.create({
+      data: {
+        estudiante_id: postulacion.estudiante_id,
+        postulacion_id: createDto.postulacion_id,
+        asesor_id: postulacion.asesor_academico_id ?? undefined,
+        horas_totales: horasTotales,
+        horas_cumplidas: createDto.horas_cumplidas ?? 0,
+        estado: EstadoPractica.plan_pendiente,
+      },
+      include: practicaFullInclude,
+    });
+  }
+
+  async updateHoras(id: number, horas: number, tipo: 'sumar' | 'restar' = 'sumar') {
+    const practica = await this.findOne(id);
+
+    const nuevasHoras =
+      tipo === 'sumar'
+        ? practica.horas_cumplidas + horas
+        : practica.horas_cumplidas - horas;
+
+    if (nuevasHoras < 0) {
+      throw new ConflictException('Las horas no pueden ser negativas');
+    }
+
+    if (nuevasHoras > practica.horas_totales) {
+      throw new ConflictException(
+        `No puede superar las ${practica.horas_totales} horas totales`,
+      );
+    }
+
+    return this.prisma.practica.update({
+      where: { id },
+      data: { horas_cumplidas: nuevasHoras },
+    });
+  }
+
+  /** Legado: enlazar texto libre a campos de informe en Practica. */
+  async updateInformes(id: number, updateDto: UpdateSeguimientoDto) {
+    await this.findOne(id);
+
+    const data: Record<string, unknown> = {};
+
+    if (updateDto.informe_estudiante != null) {
+      data.informe_observaciones = updateDto.informe_estudiante;
+    }
+    if (updateDto.informe_asesor != null) {
+      data.informe_observaciones = updateDto.informe_asesor;
+    }
+
+    return this.prisma.practica.update({
+      where: { id },
+      data,
+    });
+  }
+
+  /**
+   * Legado: equivalía a “cerrar evaluación”.
+   * Solo aplica si la práctica está en informe_pendiente (cierra con aprobación del asesor vía flujo antiguo).
+   */
+  async evaluarPractica(id: number, evaluacion: string, observaciones?: string) {
+    const practica = await this.findOne(id);
+
+    if (evaluacion === 'aprobado') {
+      if (practica.estado !== EstadoPractica.informe_pendiente) {
+        throw new ConflictException(
+          'Use el flujo de informe final: solo se aprueba desde estado informe_pendiente o mediante PUT .../informe-final/aprobar',
+        );
+      }
+      const porcentajeCumplido =
+        practica.horas_totales > 0
+          ? (practica.horas_cumplidas / practica.horas_totales) * 100
+          : 0;
+      if (porcentajeCumplido < 70) {
+        throw new ConflictException(
+          `No cumple el mínimo de horas (${porcentajeCumplido.toFixed(1)}%)`,
+        );
+      }
+      await this.prisma.postulacion.update({
+        where: { id: practica.postulacion_id },
+        data: { estado: EstadoPostulacion.finalizado },
+      });
+      return this.prisma.practica.update({
+        where: { id },
+        data: {
+          estado: EstadoPractica.aprobado,
+          informe_aprobado: true,
+          informe_aprobado_en: new Date(),
+          informe_observaciones: observaciones ?? practica.informe_observaciones,
+        },
+      });
+    }
+
+    return this.prisma.practica.update({
+      where: { id },
+      data: {
+        informe_observaciones: observaciones ?? undefined,
+      },
+    });
+  }
+
+  async getEstadisticasHoras() {
+    const practicas = await this.prisma.practica.findMany({
+      select: {
+        horas_cumplidas: true,
+        horas_totales: true,
+        estado: true,
+      },
+    });
+
+    const totalEstudiantes = practicas.length;
+    const completados = practicas.filter((p) => p.estado === EstadoPractica.aprobado)
+      .length;
+    const enProgreso = practicas.filter(
+      (p) =>
+        p.estado !== EstadoPractica.aprobado &&
+        p.estado !== EstadoPractica.plan_pendiente,
+    ).length;
+
+    const promedioHoras =
+      totalEstudiantes > 0
+        ? practicas.reduce((acc, p) => acc + p.horas_cumplidas, 0) /
+          totalEstudiantes
+        : 0;
+
+    const horasCfg =
+      this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
+      300;
+
+    return {
+      total_estudiantes_practica: totalEstudiantes,
+      practicas_completadas: completados,
+      practicas_en_progreso: enProgreso,
+      promedio_horas_cumplidas: Math.round(promedioHoras),
+      horas_totales_requeridas: horasCfg,
+    };
+  }
+
+  async registrarReporteMensual(practicaId: number, dto: CreateReporteMensualDto) {
+    await this.findOne(practicaId);
+
+    const row = await this.prisma.reporteMensualPractica.upsert({
+      where: {
+        practica_id_anio_mes: {
+          practica_id: practicaId,
+          anio: dto.anio,
+          mes: dto.mes,
+        },
+      },
+      create: {
+        practica_id: practicaId,
+        anio: dto.anio,
+        mes: dto.mes,
+        horas_reportadas: dto.horas_reportadas,
+        archivo_url: dto.archivo_url,
+        observaciones: dto.observaciones,
+        validado: false,
+        validado_por: null,
+        validado_en: null,
+        observaciones_asesor: null,
+      },
+      update: {
+        horas_reportadas: dto.horas_reportadas,
+        archivo_url: dto.archivo_url,
+        observaciones: dto.observaciones,
+        validado: false,
+        validado_por: null,
+        validado_en: null,
+        observaciones_asesor: null,
+      },
+    });
+
+    const agg = await this.prisma.reporteMensualPractica.aggregate({
+      where: { practica_id: practicaId, validado: true },
+      _sum: { horas_reportadas: true },
+    });
+    const totalReportado = agg._sum.horas_reportadas ?? 0;
+
+    await this.prisma.practica.update({
+      where: { id: practicaId },
+      data: { horas_cumplidas: totalReportado },
+    });
+
+    return row;
+  }
+
+  async validarReporteMensual(
+    practicaId: number,
+    reporteId: number,
+    usuarioId: number,
+    payload: { validado: boolean; observaciones?: string },
+    userRoles?: string[],
+  ) {
+    const practica = await this.findOne(practicaId);
+
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { usuario_id: usuarioId },
+    });
+    const esAsesorAsignado =
+      asesor != null && practica.asesor_id != null && asesor.id === practica.asesor_id;
+
+    const roles = userRoles ?? [];
+    const esAdministrativo =
+      roles.includes(RolNombre.admin) ||
+      roles.includes(RolNombre.secretaria) ||
+      roles.includes(RolNombre.coordinador);
+
+    if (!esAsesorAsignado && !esAdministrativo) {
+      throw new ForbiddenException(
+        'Solo el asesor asignado o personal administrativo puede validar reportes mensuales.',
+      );
+    }
+
+    const reporte = await this.prisma.reporteMensualPractica.findFirst({
+      where: { id: reporteId, practica_id: practicaId },
+    });
+    if (!reporte) {
+      throw new NotFoundException('Reporte mensual no encontrado');
+    }
+
+    await this.prisma.reporteMensualPractica.update({
+      where: { id: reporteId },
+      data: {
+        validado: payload.validado,
+        validado_por: payload.validado ? usuarioId : null,
+        validado_en: payload.validado ? new Date() : null,
+        observaciones_asesor: payload.observaciones ?? null,
+      },
+    });
+
+    const agg = await this.prisma.reporteMensualPractica.aggregate({
+      where: { practica_id: practicaId, validado: true },
+      _sum: { horas_reportadas: true },
+    });
+    const totalReportado = agg._sum.horas_reportadas ?? 0;
+
+    await this.prisma.practica.update({
+      where: { id: practicaId },
+      data: { horas_cumplidas: totalReportado },
+    });
+
+    return this.prisma.reporteMensualPractica.findUnique({ where: { id: reporteId } });
+  }
+
+  async listarReportesMensuales(practicaId: number) {
+    await this.findOne(practicaId);
+    return this.prisma.reporteMensualPractica.findMany({
+      where: { practica_id: practicaId },
+      orderBy: [{ anio: 'desc' }, { mes: 'desc' }],
+    });
+  }
+
+  async solicitarRevisionInformeFinal(practicaId: number) {
+    const practica = await this.findOne(practicaId);
+    const horasMin =
+      this.configService.get<number>('practicas.horasMinimasRevisionInforme') ??
+      300;
+
+    if (practica.horas_cumplidas < horasMin) {
+      throw new ConflictException(
+        `No alcanza el mínimo de ${horasMin} horas cumplidas para el informe final.`,
+      );
+    }
+
+    if (
+      practica.estado !== EstadoPractica.en_ejecucion &&
+      practica.estado !== EstadoPractica.plan_validado
+    ) {
+      throw new ConflictException(
+        'Solo puede solicitar revisión del informe en ejecución de prácticas.',
+      );
+    }
+
+    return this.prisma.practica.update({
+      where: { id: practicaId },
+      data: { estado: EstadoPractica.informe_pendiente },
+    });
+  }
+
+  async getReportePorEstudiante(estudianteId: number) {
+    const postulaciones = await this.prisma.postulacion.findMany({
+      where: { estudiante_id: estudianteId },
+      include: {
+        practica: true,
+        oferta: {
+          include: {
+            empresa: {
+              select: {
+                razon_social: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { fecha_postulacion: 'desc' },
+    });
+
+    const practicasAprobadas = postulaciones.filter(
+      (p) =>
+        p.estado === EstadoPostulacion.finalizado ||
+        p.practica?.estado === EstadoPractica.aprobado,
+    );
+
+    const totalHoras = practicasAprobadas.reduce(
+      (acc, p) => acc + (p.practica?.horas_cumplidas || 0),
+      0,
+    );
+
+    return {
+      estudiante_id: estudianteId,
+      total_postulaciones: postulaciones.length,
+      practicas_aprobadas: practicasAprobadas.length,
+      total_horas_acumuladas: totalHoras,
+      detalle: postulaciones.map((p) => ({
+        oferta: p.oferta.titulo,
+        empresa: p.oferta.empresa.razon_social,
+        estado_postulacion: p.estado,
+        estado_practica: p.practica?.estado ?? 'sin_registro',
+        horas_cumplidas: p.practica?.horas_cumplidas ?? 0,
+      })),
+    };
+  }
+
+  async assertEsEstudiantePractica(practicaId: number, usuarioId: number) {
+    const practica = await this.findOne(practicaId);
+    const est = await this.prisma.estudiante.findUnique({
+      where: { usuario_id: usuarioId },
+    });
+    if (!est || est.id !== practica.estudiante_id) {
+      throw new ForbiddenException('No puede modificar esta práctica.');
+    }
+    return practica;
+  }
+
+  async subirPlanPracticas(
+    practicaId: number,
+    archivoUrl: string,
+    nombreOriginal: string | undefined,
+    usuarioId: number,
+  ) {
+    const practica = await this.assertEsEstudiantePractica(practicaId, usuarioId);
+
+    if (practica.estado !== EstadoPractica.plan_pendiente) {
+      throw new ConflictException(
+        'El plan solo se registra cuando la práctica está pendiente de validación.',
+      );
+    }
+
+    await this.prisma.documentoPractica.create({
+      data: {
+        practica_id: practicaId,
+        tipo: TipoDocumentoPractica.plan_practicas,
+        archivo_url: archivoUrl,
+        nombre_original: nombreOriginal,
+        subido_por: usuarioId,
+      },
+    });
+
+    return this.prisma.practica.update({
+      where: { id: practicaId },
+      data: {
+        plan_practicas_url: archivoUrl,
+        plan_practicas_subido_en: new Date(),
+      },
+      include: practicaFullInclude,
+    });
+  }
+
+  async validarPlanAdministrativo(
+    practicaId: number,
+    usuarioValidadorId: number,
+    dto: ValidarPlanDto,
+  ) {
+    const practica = await this.findOne(practicaId);
+
+    if (!practica.plan_practicas_url) {
+      throw new ConflictException(
+        'No hay plan de prácticas cargado para validar.',
+      );
+    }
+
+    if (dto.aprobado) {
+      const updated = await this.prisma.practica.update({
+        where: { id: practicaId },
+        data: {
+          plan_validado: true,
+          plan_validado_por: usuarioValidadorId,
+          plan_validado_en: new Date(),
+          plan_observaciones: dto.observaciones ?? null,
+          estado: EstadoPractica.en_ejecucion,
+        },
+        include: practicaFullInclude,
+      });
+
+      await this.prisma.documentoPractica.updateMany({
+        where: {
+          practica_id: practicaId,
+          tipo: TipoDocumentoPractica.plan_practicas,
+        },
+        data: {
+          validado: true,
+          validado_por: usuarioValidadorId,
+          validado_en: new Date(),
+          observaciones: dto.observaciones ?? undefined,
+        },
+      });
+
+      return updated;
+    }
+
+    return this.prisma.practica.update({
+      where: { id: practicaId },
+      data: {
+        plan_validado: false,
+        plan_observaciones: dto.observaciones ?? null,
+        estado: EstadoPractica.plan_pendiente,
+      },
+      include: practicaFullInclude,
+    });
+  }
+
+  async registrarInformeFinal(
+    practicaId: number,
+    archivoUrl: string,
+    nombreOriginal: string | undefined,
+    usuarioId: number,
+  ) {
+    const practica = await this.findOne(practicaId);
+
+    const esEstudiante = await this.prisma.estudiante.findFirst({
+      where: { usuario_id: usuarioId, id: practica.estudiante_id },
+    });
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { usuario_id: usuarioId },
+    });
+    const esAsesorPractica =
+      asesor != null && practica.asesor_id != null && asesor.id === practica.asesor_id;
+
+    if (!esEstudiante && !esAsesorPractica) {
+      throw new ForbiddenException(
+        'Solo el estudiante o el asesor de la práctica pueden cargar el informe final.',
+      );
+    }
+
+    if (
+      practica.estado !== EstadoPractica.informe_pendiente &&
+      practica.estado !== EstadoPractica.en_ejecucion
+    ) {
+      throw new ConflictException(
+        'El informe final solo se registra en ejecución o pendiente de firma.',
+      );
+    }
+
+    await this.prisma.documentoPractica.create({
+      data: {
+        practica_id: practicaId,
+        tipo: TipoDocumentoPractica.informe_final,
+        archivo_url: archivoUrl,
+        nombre_original: nombreOriginal,
+        subido_por: usuarioId,
+      },
+    });
+
+    return this.prisma.practica.update({
+      where: { id: practicaId },
+      data: {
+        informe_final_url: archivoUrl,
+        informe_final_subido_en: new Date(),
+        estado:
+          practica.estado === EstadoPractica.en_ejecucion
+            ? EstadoPractica.informe_pendiente
+            : practica.estado,
+      },
+      include: practicaFullInclude,
+    });
+  }
+
+  async registrarActaAprobacionAsesor(
+    practicaId: number,
+    archivoUrl: string,
+    nombreOriginal: string | undefined,
+    usuarioId: number,
+  ) {
+    const practica = await this.findOne(practicaId);
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { usuario_id: usuarioId },
+    });
+
+    if (
+      !asesor ||
+      practica.asesor_id == null ||
+      asesor.id !== practica.asesor_id
+    ) {
+      throw new ForbiddenException(
+        'Solo el asesor asignado puede cargar el acta de aprobación.',
+      );
+    }
+
+    await this.prisma.documentoPractica.create({
+      data: {
+        practica_id: practicaId,
+        tipo: TipoDocumentoPractica.acta_aprobacion_asesor,
+        archivo_url: archivoUrl,
+        nombre_original: nombreOriginal,
+        subido_por: usuarioId,
+      },
+    });
+
+    return this.prisma.practica.findUnique({
+      where: { id: practicaId },
+      include: practicaFullInclude,
+    });
+  }
+
+  async aprobarInformeFinal(
+    practicaId: number,
+    usuarioId: number,
+    dto: AprobarInformeDto,
+  ) {
+    const practica = await this.findOne(practicaId);
+  
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      include: { roles: { include: { rol: true } } },
+    });
+  
+    const rolesNombres = usuario?.roles.map((r) => r.rol.nombre) ?? [];
+    const esAutorizado =
+      rolesNombres.includes('asesor') ||
+      rolesNombres.includes('admin') ||
+      rolesNombres.includes('secretaria');
+  
+    if (!esAutorizado) {
+      throw new ForbiddenException(
+        'Solo el asesor o personal administrativo puede aprobar el informe final.',
+      );
+    }
+  
+    const esAdministrativo =
+      rolesNombres.includes('admin') || rolesNombres.includes('secretaria');
+    if (!esAdministrativo) {
+      const asesor = await this.prisma.asesor.findUnique({
+        where: { usuario_id: usuarioId },
+        select: { id: true },
+      });
+      if (!asesor || practica.asesor_id == null || asesor.id !== practica.asesor_id) {
+        throw new ForbiddenException(
+          'Solo el asesor asignado puede aprobar el informe final de esta práctica.',
+        );
+      }
+    }
+  
+    if (practica.estado !== EstadoPractica.informe_pendiente) {
+      throw new ConflictException(
+        'El informe debe estar pendiente de firma/aprobación del asesor.',
+      );
+    }
+  
+    if (!practica.informe_final_url && !dto.acta_aprobacion_url) {
+      throw new ConflictException(
+        'Debe existir un informe cargado o adjuntar el acta de aprobación.',
+      );
+    }
+  
+    const porcentajeCumplido =
+      practica.horas_totales > 0
+        ? (practica.horas_cumplidas / practica.horas_totales) * 100
+        : 0;
+    if (porcentajeCumplido < 70) {
+      throw new ConflictException(
+        `No cumple el mínimo de horas (${porcentajeCumplido.toFixed(1)}%).`,
+      );
+    }
+  
+    if (dto.acta_aprobacion_url) {
+      await this.prisma.documentoPractica.create({
+        data: {
+          practica_id: practicaId,
+          tipo: TipoDocumentoPractica.acta_aprobacion_asesor,
+          archivo_url: dto.acta_aprobacion_url,
+          subido_por: usuarioId,
+        },
+      });
+    }
+  
+    await this.prisma.postulacion.update({
+      where: { id: practica.postulacion_id },
+      data: { estado: EstadoPostulacion.finalizado },
+    });
+  
+    // Buscar asesor solo si el usuario tiene ese rol; puede ser null para admin/secretaría
+    const asesor = rolesNombres.includes('asesor')
+      ? await this.prisma.asesor.findUnique({ where: { usuario_id: usuarioId } })
+      : null;
+  
+    return this.prisma.practica.update({
+      where: { id: practicaId },
+      data: {
+        estado: EstadoPractica.aprobado,
+        informe_aprobado: true,
+        informe_aprobado_en: new Date(),
+        informe_aprobado_por: asesor?.id ?? null,  // null si aprueba admin/secretaría
+        informe_observaciones: dto.observaciones ?? undefined,
+      },
+      include: practicaFullInclude,
+    });
+  }
+
+  /** Resolución de facultad (administrativo). Opcional para archivar expediente. */
+  async cargarResolucionFacultad(
+    practicaId: number,
+    usuarioId: number,
+    payload: { numero?: string; archivo_url: string },
+  ) {
+    await this.findOne(practicaId);
+
+    await this.prisma.documentoPractica.create({
+      data: {
+        practica_id: practicaId,
+        tipo: TipoDocumentoPractica.resolucion_facultad,
+        archivo_url: payload.archivo_url,
+        subido_por: usuarioId,
+      },
+    });
+
+    return this.prisma.practica.update({
+      where: { id: practicaId },
+      data: {
+        resolucion_numero: payload.numero,
+        resolucion_url: payload.archivo_url,
+        resolucion_cargado_en: new Date(),
+        resolucion_cargado_por: usuarioId,
+      },
+      include: practicaFullInclude,
+    });
+  }
+
+  /** Usado por la puerta de tesis y sustentación. */
+  async tienePracticaAprobada(estudianteId: number): Promise<boolean> {
+    const row = await this.prisma.practica.findFirst({
+      where: {
+        estudiante_id: estudianteId,
+        estado: EstadoPractica.aprobado,
+      },
+    });
+    return !!row;
+  }
+
+  /** Cola de secretaría: planes con PDF pendientes de OK, documentos y reportes mensuales sin validar. */
+  async colaSecretaria() {
+    const [planes_pendientes, documentos_sin_validar, reportes_mensuales_sin_validar] =
+      await Promise.all([
+      this.prisma.practica.findMany({
+        where: {
+          estado: EstadoPractica.plan_pendiente,
+          plan_practicas_url: { not: null },
+        },
+        include: practicaFullInclude,
+        orderBy: { plan_practicas_subido_en: 'desc' },
+      }),
+      this.prisma.documentoPractica.findMany({
+        where: { validado: false },
+        include: {
+          practica: {
+            include: practicaFullInclude,
+          },
+        },
+        orderBy: { subido_en: 'desc' },
+        take: 200,
+      }),
+      this.prisma.reporteMensualPractica.findMany({
+        where: { validado: false },
+        include: {
+          practica: {
+            include: practicaFullInclude,
+          },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 200,
+      }),
+    ]);
+    return {
+      planes_pendientes,
+      documentos_sin_validar,
+      reportes_mensuales_sin_validar,
+    };
+  }
+
+  async colaAsesor(usuarioId: number) {
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { usuario_id: usuarioId },
+      select: { id: true },
+    });
+    if (!asesor) {
+      throw new NotFoundException('Asesor no encontrado');
+    }
+
+    const [reportes_mensuales_sin_validar, documentos_sin_validar, informes_pendientes_asesor] =
+      await Promise.all([
+        this.prisma.reporteMensualPractica.findMany({
+          where: {
+            validado: false,
+            practica: { asesor_id: asesor.id },
+          },
+          include: { practica: { include: practicaFullInclude } },
+          orderBy: { created_at: 'desc' },
+          take: 200,
+        }),
+        this.prisma.documentoPractica.findMany({
+          where: {
+            validado: false,
+            tipo: TipoDocumentoPractica.informe_final,
+            practica: { asesor_id: asesor.id },
+          },
+          include: { practica: { include: practicaFullInclude } },
+          orderBy: { subido_en: 'desc' },
+          take: 200,
+        }),
+        this.prisma.practica.findMany({
+          where: {
+            asesor_id: asesor.id,
+            estado: EstadoPractica.informe_pendiente,
+          },
+          include: practicaFullInclude,
+          orderBy: { informe_final_subido_en: 'desc' },
+          take: 200,
+        }),
+      ]);
+
+    return {
+      reportes_mensuales_sin_validar,
+      documentos_sin_validar,
+      informes_pendientes_asesor,
+    };
+  }
+
+  async updateAdmin(id: number, dto: UpdatePracticaAdminDto) {
+    await this.findOne(id);
+    const data: Record<string, unknown> = {};
+    if (dto.horas_totales !== undefined) {
+      data.horas_totales = dto.horas_totales;
+    }
+    if (dto.horas_cumplidas !== undefined) {
+      data.horas_cumplidas = dto.horas_cumplidas;
+    }
+    if (dto.fecha_inicio !== undefined) {
+      data.fecha_inicio = dto.fecha_inicio ? new Date(dto.fecha_inicio) : null;
+    }
+    if (dto.fecha_fin_estimada !== undefined) {
+      data.fecha_fin_estimada = dto.fecha_fin_estimada
+        ? new Date(dto.fecha_fin_estimada)
+        : null;
+    }
+    if (dto.estado !== undefined) {
+      data.estado = dto.estado;
+    }
+    if (dto.asesor_id !== undefined) {
+      data.asesor_id = dto.asesor_id;
+    }
+    return this.prisma.practica.update({
+      where: { id },
+      data,
+      include: practicaFullInclude,
+    });
+  }
+
+  async validarDocumentoPractica(
+    practicaId: number,
+    documentoId: number,
+    validadorUsuarioId: number,
+    userRoles: string[] | undefined,
+    dto: ValidarDocumentoPracticaDto,
+  ) {
+    const doc = await this.prisma.documentoPractica.findFirst({
+      where: { id: documentoId, practica_id: practicaId },
+      include: { practica: { select: { asesor_id: true } } },
+    });
+    if (!doc) {
+      throw new NotFoundException('Documento no encontrado');
+    }
+
+    const roles = userRoles ?? [];
+    const esAdministrativo =
+      roles.includes(RolNombre.admin) ||
+      roles.includes(RolNombre.secretaria) ||
+      roles.includes(RolNombre.coordinador);
+
+    if (!esAdministrativo) {
+      const asesor = await this.prisma.asesor.findUnique({
+        where: { usuario_id: validadorUsuarioId },
+        select: { id: true },
+      });
+
+      const esAsesorAsignado =
+        asesor != null &&
+        doc.practica.asesor_id != null &&
+        asesor.id === doc.practica.asesor_id;
+
+      if (!esAsesorAsignado) {
+        throw new ForbiddenException(
+          'Solo el asesor asignado o personal administrativo puede validar documentos de la práctica.',
+        );
+      }
+
+      if (doc.tipo !== TipoDocumentoPractica.informe_final) {
+        throw new ForbiddenException(
+          'El asesor solo puede validar documentos de tipo informe final.',
+        );
+      }
+    }
+
+    return this.prisma.documentoPractica.update({
+      where: { id: documentoId },
+      data: {
+        validado: dto.validado,
+        validado_por: dto.validado ? validadorUsuarioId : null,
+        validado_en: dto.validado ? new Date() : null,
+        observaciones: dto.observaciones ?? undefined,
+      },
+    });
+  }
+}

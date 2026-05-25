@@ -1,14 +1,21 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import { PrismaService } from 'prisma/prisma.service';
-import { main } from '../prisma/seed';
 
-// Ajusta el path si es necesario
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const uploadDir =
+    process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
+  if (!existsSync(uploadDir)) {
+    mkdirSync(uploadDir, { recursive: true });
+  }
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.useStaticAssets(uploadDir, { prefix: '/uploads/' });
 
   app.enableCors({
     origin: [

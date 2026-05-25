@@ -13,14 +13,4 @@ export class CreateEstudianteDto {
   @ApiProperty()
   @IsInt()
   escuela_id: number;
-
-  @ApiProperty({ example: 'X', required: false })
-  @IsString()
-  @IsOptional()
-  ciclo?: string;
-
-  @ApiProperty({ required: false })
-  @IsString()
-  @IsOptional()
-  resolucion_practicas?: string;
 }

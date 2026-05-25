@@ -2,6 +2,7 @@
 export enum RolNombre {
   admin = 'admin',
   coordinador = 'coordinador',
+  secretaria = 'secretaria',
   asesor = 'asesor',
   estudiante = 'estudiante',
   empresa = 'empresa',
@@ -18,8 +19,46 @@ export enum EstadoPostulacion {
 export enum EstadoTesis {
   propuesta = 'propuesta',
   desarrollo = 'desarrollo',
-  sustentacion = 'sustentacion',
+  en_revision = 'en_revision',
+  observaciones_emitidas = 'observaciones_emitidas',
+  observaciones_levantadas = 'observaciones_levantadas',
+  aprobado_jurado = 'aprobado_jurado',
+  expedito = 'expedito',
+  sustentacion_programada = 'sustentacion_programada',
+  sustentado = 'sustentado',
   culminado = 'culminado',
+}
+
+export enum EstadoPractica {
+  plan_pendiente = 'plan_pendiente',
+  plan_validado = 'plan_validado',
+  en_ejecucion = 'en_ejecucion',
+  informe_pendiente = 'informe_pendiente',
+  aprobado = 'aprobado',
+}
+
+export interface Practica {
+  id: number;
+  estudiante_id: number;
+  postulacion_id: number;
+  asesor_id: number | null;
+  estado: EstadoPractica | string;
+  plan_practicas_url: string | null;
+  plan_validado: boolean;
+  informe_final_url: string | null;
+  informe_aprobado: boolean;
+  horas_cumplidas: number;
+  horas_totales: number;
+  resolucion_url?: string | null;
+  postulacion?: Postulacion;
+  documentos?: DocumentoPractica[];
+}
+
+export interface DocumentoPractica {
+  id: number;
+  tipo: string;
+  archivo_url: string;
+  subido_en: string;
 }
 
 // ==================== MODELOS BASE ====================
@@ -68,8 +107,6 @@ export interface Estudiante {
   usuario_id: number;
   codigo_universitario: string;
   escuela_id: number;
-  ciclo: string | null;
-  resolucion_practicas: string | null;
   created_at: Date;
   usuario: Usuario;
   escuela: Escuela;
@@ -152,7 +189,7 @@ export interface Postulacion {
   estudiante: Estudiante;
   asesor_academico?: Asesor | null;
   asesorPostulacion?: AsesorPostulacion;
-  seguimiento?: SeguimientoPractica;
+  practica?: Practica | null;
 }
 
 export interface AsesorPostulacion {
@@ -164,27 +201,15 @@ export interface AsesorPostulacion {
   postulacion: Postulacion;
 }
 
-export interface SeguimientoPractica {
-  id: number;
-  postulacion_id: number;
-  horas_cumplidas: number;
-  horas_totales: number;
-  informe_estudiante: string | null;
-  informe_asesor: string | null;
-  evaluacion: string;
-  fecha_evaluacion: Date | null;
-  created_at: Date;
-  postulacion: Postulacion;
-}
-
 export interface Tesis {
   id: number;
   titulo: string;
   resumen: string | null;
   estudiante_id: number;
   asesor_principal_id: number;
-  estado: EstadoTesis;
+  estado: EstadoTesis | string;
   fecha_inicio: Date | null;
+  fecha_recepcion_documentos?: Date | string | null;
   fecha_sustentacion: Date | null;
   created_at: Date;
   estudiante: Estudiante;
@@ -192,6 +217,37 @@ export interface Tesis {
   jurados?: JuradoTesis[];
   avances?: AvanceTesis[];
   acta?: ActaSustentacion | null;
+  documentos?: DocumentoTesis[];
+  pagos?: PagoTesis[];
+}
+
+export interface DocumentoTesis {
+  id: number;
+  tesis_id: number;
+  tipo: string;
+  archivo_url: string;
+  nombre_original?: string | null;
+  version: number;
+  subido_en: string;
+}
+
+export interface PagoTesis {
+  id: number;
+  tesis_id: number;
+  tipo: string;
+  monto: string | number;
+  estado: string;
+  comprobante_url?: string | null;
+  comprobante_subido_en?: string | null;
+}
+
+export interface RevisionJurado {
+  id: number;
+  estado: string;
+  observaciones: string | null;
+  conforme: boolean;
+  revisado_en: string | null;
+  version_documento: number;
 }
 
 export interface JuradoTesis {
@@ -199,8 +255,9 @@ export interface JuradoTesis {
   tesis_id: number;
   asesor_id: number;
   rol: string;
-  tesis: Tesis;
+  tesis?: Tesis;
   asesor: Asesor;
+  revisiones?: RevisionJurado[];
 }
 
 export interface AvanceTesis {
@@ -253,7 +310,6 @@ export interface EstudianteFrontend {
   usuario_id: number;
   codigo_universitario: string;
   escuela_id: number;
-  ciclo: string | null;
   usuario: {
     nombres: string;
     apellidos: string;
@@ -343,11 +399,13 @@ export interface PostulacionFrontend {
       razon_social: string;
     };
   };
-  seguimiento?: {
+  practica?: {
     id: number;
+    estado: string;
     horas_cumplidas: number;
     horas_totales: number;
-    evaluacion: string;
+    plan_validado: boolean;
+    informe_aprobado: boolean;
   } | null;
   asesor_academico?: {
     id: number;

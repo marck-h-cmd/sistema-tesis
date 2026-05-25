@@ -22,35 +22,56 @@ export class EstudiantesController {
   constructor(private readonly estudiantesService: EstudiantesService) {}
 
   @Get()
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante, RolNombre.secretaria)
   async findAll() {
     const estudiantes = await this.estudiantesService.findAll();
     return { data: estudiantes };
   }
 
-  @Get(':id')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
-  async findOne(@Param('id') id: string) {
-    const estudiante = await this.estudiantesService.findOne(+id);
-    return { data: estudiante };
-  }
-
   @Get('user/:userId')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante, RolNombre.secretaria)
   async getByUserId(@Param('userId') userId: string) {
     const estudiante = await this.estudiantesService.getByUserId(+userId);
     return { data: estudiante };
   }
 
+  @Get(':id/estado-modulos')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.secretaria)
+  async getEstadoModulos(@Param('id') id: string) {
+    const data = await this.estudiantesService.getEstadoModulos(+id);
+    return { data };
+  }
+
+  @Get(':id/historial-practicas')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.secretaria)
+  async getHistorialPracticas(@Param('id') id: string) {
+    const historial = await this.estudiantesService.getHistorialPracticas(+id);
+    return { data: historial };
+  }
+
+  @Get(':id/tesis')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor, RolNombre.secretaria)
+  async getTesis(@Param('id') id: string) {
+    const tesis = await this.estudiantesService.getTesis(+id);
+    return { data: tesis };
+  }
+
+  @Get(':id')
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.asesor, RolNombre.estudiante, RolNombre.secretaria)
+  async findOne(@Param('id') id: string) {
+    const estudiante = await this.estudiantesService.findOne(+id);
+    return { data: estudiante };
+  }
+
   @Post()
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async create(@Body() createEstudianteDto: CreateEstudianteDto) {
     const estudiante = await this.estudiantesService.create(createEstudianteDto);
     return { data: estudiante, message: 'Estudiante creado exitosamente' };
   }
 
   @Put(':id')
-  @Roles(RolNombre.admin, RolNombre.coordinador)
+  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.secretaria)
   async update(
     @Param('id') id: string,
     @Body() updateEstudianteDto: UpdateEstudianteDto,
@@ -60,23 +81,9 @@ export class EstudiantesController {
   }
 
   @Delete(':id')
-  @Roles(RolNombre.admin)
+  @Roles(RolNombre.admin, RolNombre.secretaria)
   async remove(@Param('id') id: string) {
     await this.estudiantesService.remove(+id);
     return { message: 'Estudiante eliminado exitosamente' };
-  }
-
-  @Get(':id/historial-practicas')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante)
-  async getHistorialPracticas(@Param('id') id: string) {
-    const historial = await this.estudiantesService.getHistorialPracticas(+id);
-    return { data: historial };
-  }
-
-  @Get(':id/tesis')
-  @Roles(RolNombre.admin, RolNombre.coordinador, RolNombre.estudiante, RolNombre.asesor)
-  async getTesis(@Param('id') id: string) {
-    const tesis = await this.estudiantesService.getTesis(+id);
-    return { data: tesis };
   }
 }

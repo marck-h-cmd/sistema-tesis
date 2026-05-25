@@ -8,16 +8,19 @@ import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Save, Loader2 } from 'lucide-react';
 
-interface SeguimientoFormData {
-  horas_cumplidas: number;
-  informe_estudiante: string;
-  informe_asesor: string;
-  evaluacion: string;
+/** Solo claves admitidas por UpdateSeguimientoDto (sin horas_cumplidas). */
+export interface SeguimientoInformesPayload {
+  informe_estudiante?: string;
+  informe_asesor?: string;
+  evaluacion?: string;
 }
 
 interface SeguimientoFormProps {
-  onSubmit: (data: SeguimientoFormData) => Promise<void>;
-  initialData?: Partial<SeguimientoFormData>;
+  /** Payload filtrado para PUT /seguimiento/:id/informes */
+  onSubmit: (data: SeguimientoInformesPayload) => Promise<void>;
+  initialData?: Partial<
+    SeguimientoInformesPayload & { horas_cumplidas?: number }
+  >;
   isLoading?: boolean;
   horasTotales?: number;
 }
@@ -28,12 +31,14 @@ export function SeguimientoForm({
   isLoading = false,
   horasTotales = 300,
 }: SeguimientoFormProps) {
-  const [formData, setFormData] = React.useState<SeguimientoFormData>({
-    horas_cumplidas: initialData?.horas_cumplidas || 0,
-    informe_estudiante: initialData?.informe_estudiante || '',
-    informe_asesor: initialData?.informe_asesor || '',
-    evaluacion: initialData?.evaluacion || 'pendiente',
-  });
+  const [horas_cumplidas, setHorasCumplidas] = React.useState(
+    initialData?.horas_cumplidas ?? 0,
+  );
+  const [informe_estudiante, setInformeEstudiante] = React.useState(
+    initialData?.informe_estudiante ?? '',
+  );
+  const [informe_asesor, setInformeAsesor] = React.useState(initialData?.informe_asesor ?? '');
+  const [evaluacion, setEvaluacion] = React.useState(initialData?.evaluacion ?? 'pendiente');
 
   const evaluacionOptions = [
     { value: 'pendiente', label: 'Pendiente' },
@@ -43,25 +48,23 @@ export function SeguimientoForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(formData);
+    const payload: SeguimientoInformesPayload = {};
+    if (informe_estudiante.trim()) payload.informe_estudiante = informe_estudiante.trim();
+    if (informe_asesor.trim()) payload.informe_asesor = informe_asesor.trim();
+    if (evaluacion && evaluacion !== 'pendiente') payload.evaluacion = evaluacion;
+    await onSubmit(payload);
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === 'horas_cumplidas' ? Number(value) : value,
-    }));
-  };
-
-  const porcentaje = ((formData.horas_cumplidas / horasTotales) * 100).toFixed(1);
+  const porcentaje = ((horas_cumplidas / horasTotales) * 100).toFixed(1);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="horas_cumplidas">Horas cumplidas</Label>
+        <Label htmlFor="horas_cumplidas">Horas cumplidas (solo referencia)</Label>
+        <p className="text-xs text-muted-foreground">
+          Para cambiar horas use la acción &quot;Actualizar horas&quot; del backend o la edición
+          administrativa de práctica; este formulario no envía horas al endpoint de informes.
+        </p>
         <div className="flex items-center space-x-4">
           <Input
             id="horas_cumplidas"
@@ -69,8 +72,8 @@ export function SeguimientoForm({
             type="number"
             min={0}
             max={horasTotales}
-            value={formData.horas_cumplidas}
-            onChange={handleChange}
+            value={horas_cumplidas}
+            onChange={(e) => setHorasCumplidas(Number(e.target.value))}
             className="w-32"
           />
           <span className="text-sm text-muted-foreground">
@@ -80,7 +83,9 @@ export function SeguimientoForm({
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
             className="bg-primary h-2 rounded-full transition-all"
-            style={{ width: `${Math.min((formData.horas_cumplidas / horasTotales) * 100, 100)}%` }}
+            style={{
+              width: `${Math.min((horas_cumplidas / horasTotales) * 100, 100)}%`,
+            }}
           />
         </div>
       </div>
@@ -90,10 +95,10 @@ export function SeguimientoForm({
         <Textarea
           id="informe_estudiante"
           name="informe_estudiante"
-          value={formData.informe_estudiante}
-          onChange={handleChange}
+          value={informe_estudiante}
+          onChange={(e) => setInformeEstudiante(e.target.value)}
           rows={3}
-          placeholder="Escribe el informe de avance..."
+          placeholder="Informe de avance..."
         />
       </div>
 
@@ -102,10 +107,10 @@ export function SeguimientoForm({
         <Textarea
           id="informe_asesor"
           name="informe_asesor"
-          value={formData.informe_asesor}
-          onChange={handleChange}
+          value={informe_asesor}
+          onChange={(e) => setInformeAsesor(e.target.value)}
           rows={3}
-          placeholder="Escribe las observaciones..."
+          placeholder="Observaciones del asesor..."
         />
       </div>
 
@@ -115,8 +120,8 @@ export function SeguimientoForm({
           id="evaluacion"
           name="evaluacion"
           options={evaluacionOptions}
-          value={formData.evaluacion}
-          onChange={handleChange}
+          value={evaluacion}
+          onChange={(e) => setEvaluacion(e.target.value)}
         />
       </div>
 
@@ -130,7 +135,7 @@ export function SeguimientoForm({
           ) : (
             <>
               <Save className="h-4 w-4 mr-2" />
-              Guardar Seguimiento
+              Guardar informes
             </>
           )}
         </Button>

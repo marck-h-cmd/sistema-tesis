@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { estudiantesApi } from '@/lib/api/endpoints';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { estudiantesApi, practicasApi } from '@/lib/api/endpoints';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Sidebar } from '@/components/layouts/Sidebar';
 import { Header } from '@/components/layouts/Header';
@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Search, User, Mail, Phone, School, Edit } from 'lucide-react';
-import { EstudianteEditForm } from '@/components/forms/EstudianteEditForm';
+import { EstudianteEditForm, type PracticaAdminRow } from '@/components/forms/EstudianteEditForm';
 import { Dialog } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
@@ -20,7 +20,11 @@ export default function EstudiantesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingEstudiante, setEditingEstudiante] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [practicaSavingId, setPracticaSavingId] = useState<number | null>(null);
   const { hasRole } = useAuth();
+  const qc = useQueryClient();
+
+  const canAdminPractica = hasRole('admin') || hasRole('coordinador');
 
   const { data: estudiantes, isLoading, refetch } = useQuery({
     queryKey: ['estudiantes'],
@@ -43,15 +47,78 @@ export default function EstudiantesPage() {
     },
   });
 
-  const handleEditEstudiante = async (data: any) => {
+  const { data: estudianteEditDetail } = useQuery({
+    queryKey: ['estudiante', editingEstudiante?.id, 'modal-detail'],
+    queryFn: () =>
+      estudiantesApi.getOne(editingEstudiante!.id).then((res) => res.data.data),
+    enabled: !!editingEstudiante,
+  });
+
+  const practicasAdminRows: PracticaAdminRow[] = !canAdminPractica
+    ? []
+    : estudianteEditDetail?.postulaciones
+        ?.filter((p: { practica?: unknown }) => p.practica)
+        .map((p: any) => ({
+          practicaId: p.practica.id,
+          postulacionId: p.id,
+          horas_totales: p.practica.horas_totales ?? 0,
+          horas_cumplidas: p.practica.horas_cumplidas ?? 0,
+          estado: p.practica.estado,
+          fecha_inicio: p.practica.fecha_inicio,
+          fecha_fin_estimada: p.practica.fecha_fin_estimada,
+        })) ?? [];
+
+  const handleSavePractica = async (
+    practicaId: number,
+    payload: Record<string, unknown>,
+  ) => {
+    setPracticaSavingId(practicaId);
+    try {
+      await practicasApi.updateAdmin(practicaId, payload);
+      toast.success('Práctica actualizada');
+      await qc.invalidateQueries({
+        queryKey: ['estudiante', editingEstudiante?.id, 'modal-detail'],
+      });
+      await refetch();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'No se pudo actualizar la práctica');
+    } finally {
+      setPracticaSavingId(null);
+    }
+  };
+
+  const handleEditEstudiante = async (data: {
+    nombres: string;
+    apellidos: string;
+    email: string;
+    telefono?: string;
+    dni: string;
+    codigo_universitario: string;
+    escuela_id: number;
+    activo?: boolean;
+  }) => {
     if (!editingEstudiante) return;
 
     setIsEditing(true);
     try {
-      await estudiantesApi.update(editingEstudiante.id, data);
+      await estudiantesApi.update(editingEstudiante.id, {
+        codigo_universitario: data.codigo_universitario,
+        escuela_id: data.escuela_id,
+        usuario: {
+          nombres: data.nombres,
+          apellidos: data.apellidos,
+          email: data.email,
+          telefono: data.telefono || undefined,
+          dni: data.dni,
+          activo: data.activo,
+        },
+      });
       toast.success('Estudiante actualizado exitosamente');
       setEditingEstudiante(null);
       refetch();
+      qc.invalidateQueries({
+        queryKey: ['estudiante', editingEstudiante.id, 'modal-detail'],
+      });
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Error al actualizar el estudiante');
     } finally {
@@ -121,11 +188,6 @@ export default function EstudiantesPage() {
                       <Mail className="h-4 w-4 mr-2" />
                       {estudiante.usuario.email}
                     </div>
-                    {estudiante.ciclo && (
-                      <Badge variant="secondary" className="mt-2">
-                        {estudiante.ciclo} ciclo
-                      </Badge>
-                    )}
                   </div>
 
                   <div className="mt-4 pt-4 border-t flex justify-between text-sm">
@@ -138,7 +200,7 @@ export default function EstudiantesPage() {
                   </div>
 
                   {/* Botón de editar para admins */}
-                  {(hasRole('admin') || hasRole('coordinador')) && (
+                  {(hasRole('admin') || hasRole('coordinador') || hasRole('secretaria')) && (
                     <div className="mt-4 pt-4 border-t">
                       <Button
                         variant="outline"
@@ -165,11 +227,14 @@ export default function EstudiantesPage() {
       >
         {editingEstudiante && escuelas && (
           <EstudianteEditForm
-            estudiante={editingEstudiante}
+            estudiante={estudianteEditDetail ?? editingEstudiante}
             escuelas={escuelas}
             onSubmit={handleEditEstudiante}
             onCancel={closeEditModal}
             isLoading={isEditing}
+            practicasAdmin={canAdminPractica ? practicasAdminRows : undefined}
+            onSavePractica={canAdminPractica ? handleSavePractica : undefined}
+            practicaSavingId={practicaSavingId ?? undefined}
           />
         )}
       </Dialog>
