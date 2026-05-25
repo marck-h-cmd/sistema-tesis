@@ -24,6 +24,30 @@ import { RolNombre } from '@prisma/client';
 export class PracticasController {
   constructor(private readonly practicas: PracticasService) {}
 
+  @Get('pendientes-asignacion-asesor')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async pendientesAsignacionAsesor() {
+    const data = await this.practicas.findPendientesAsignacionAsesor();
+    return { data };
+  }
+
+  @Get('asesor/cola')
+  @Roles(RolNombre.asesor)
+  async colaAsesor(@CurrentUser() user: { id: number }) {
+    const data = await this.practicas.colaAsesor(user.id);
+    return { data };
+  }
+
+  @Put(':id/asignar-asesor')
+  @Roles(RolNombre.admin, RolNombre.coordinador)
+  async asignarAsesor(
+    @Param('id') id: string,
+    @Body() body: { asesor_id: number },
+  ) {
+    const row = await this.practicas.asignarAsesor(+id, +body.asesor_id);
+    return { data: row, message: 'Asesor asignado' };
+  }
+
   @Get('secretaria/cola')
   @Roles(RolNombre.secretaria, RolNombre.admin, RolNombre.asesor)
   async colaSecretaria() {
@@ -47,12 +71,13 @@ export class PracticasController {
     @Param('id') id: string,
     @Param('documentoId') documentoId: string,
     @Body() dto: ValidarDocumentoPracticaDto,
-    @CurrentUser() user: { id: number },
+    @CurrentUser() user: { id: number; roles?: string[] },
   ) {
     const row = await this.practicas.validarDocumentoPractica(
       +id,
       +documentoId,
       user.id,
+      user.roles,
       dto,
     );
     return { data: row, message: 'Documento actualizado' };

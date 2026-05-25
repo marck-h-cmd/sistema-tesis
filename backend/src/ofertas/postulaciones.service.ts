@@ -4,7 +4,11 @@ import { CreatePostulacionDto } from './dto/create-postulacion.dto';
 import { UpdatePostulacionDto } from './dto/update-postulacion.dto';
 import { UpdateConvenioEspecificoDto } from './dto/update-convenio-especifico.dto';
 import { EmpresasService } from '../empresas/empresas.service';
-import { EstadoConvenioEspecifico, EstadoPractica } from '@prisma/client';
+import {
+  EstadoConvenioEspecifico,
+  EstadoPostulacion,
+  EstadoPractica,
+} from '@prisma/client';
 
 @Injectable()
 export class PostulacionesService {
@@ -314,7 +318,15 @@ export class PostulacionesService {
   }
 
   async asignarAsesor(postulacionId: number, asesorId: number) {
-    await this.findOne(postulacionId);
+    const postulacion = await this.findOne(postulacionId);
+
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { id: asesorId },
+      select: { id: true },
+    });
+    if (!asesor) {
+      throw new NotFoundException(`Asesor con ID ${asesorId} no encontrado`);
+    }
 
     // Verificar si ya tiene asesor asignado
     const existing = await this.prisma.asesorPostulacion.findUnique({
@@ -339,10 +351,29 @@ export class PostulacionesService {
       // También actualizar el asesor_academico_id en la postulación
       await this.prisma.postulacion.update({
         where: { id: postulacionId },
-        data: { asesor_academico_id: asesorId },
+        data: {
+          asesor_academico_id: asesorId,
+          ...(postulacion.estado === EstadoPostulacion.aceptado && {
+            estado: EstadoPostulacion.en_curso,
+          }),
+        },
       });
+
       await this.prisma.practica.updateMany({
-        where: { postulacion_id: postulacionId },
+        where: {
+          postulacion_id: postulacionId,
+          estado: { in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado] },
+        },
+        data: { asesor_id: asesorId, estado: EstadoPractica.en_ejecucion },
+      });
+
+      await this.prisma.practica.updateMany({
+        where: {
+          postulacion_id: postulacionId,
+          NOT: {
+            estado: { in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado] },
+          },
+        },
         data: { asesor_id: asesorId },
       });
     } else {
@@ -364,10 +395,29 @@ export class PostulacionesService {
       // Actualizar el asesor_academico_id en la postulación
       await this.prisma.postulacion.update({
         where: { id: postulacionId },
-        data: { asesor_academico_id: asesorId },
+        data: {
+          asesor_academico_id: asesorId,
+          ...(postulacion.estado === EstadoPostulacion.aceptado && {
+            estado: EstadoPostulacion.en_curso,
+          }),
+        },
       });
+
       await this.prisma.practica.updateMany({
-        where: { postulacion_id: postulacionId },
+        where: {
+          postulacion_id: postulacionId,
+          estado: { in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado] },
+        },
+        data: { asesor_id: asesorId, estado: EstadoPractica.en_ejecucion },
+      });
+
+      await this.prisma.practica.updateMany({
+        where: {
+          postulacion_id: postulacionId,
+          NOT: {
+            estado: { in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado] },
+          },
+        },
         data: { asesor_id: asesorId },
       });
     }

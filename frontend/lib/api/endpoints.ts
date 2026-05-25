@@ -103,11 +103,16 @@ export const seguimientoApi = {
 // Prácticas (flujo plan → ejecución → informe)
 export const practicasApi = {
   secretariaCola: () => apiClient.get('/practicas/secretaria/cola'),
+  asesorCola: () => apiClient.get('/practicas/asesor/cola'),
+  pendientesAsignacionAsesor: () =>
+    apiClient.get('/practicas/pendientes-asignacion-asesor'),
   byPostulacion: (postulacionId: number) =>
     apiClient.get(`/practicas/postulacion/${postulacionId}`),
   getOne: (practicaId: number) => apiClient.get(`/practicas/${practicaId}`),
   byEstudiante: (estudianteId: number) =>
     apiClient.get(`/practicas/estudiante/${estudianteId}`),
+  asignarAsesor: (practicaId: number, body: { asesor_id: number }) =>
+    apiClient.put(`/practicas/${practicaId}/asignar-asesor`, body),
   updateAdmin: (practicaId: number, body: Record<string, unknown>) =>
     apiClient.patch(`/practicas/${practicaId}/admin`, body),
   validarDocumento: (

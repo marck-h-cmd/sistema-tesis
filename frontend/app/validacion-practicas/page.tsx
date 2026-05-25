@@ -306,6 +306,7 @@ export default function SecretariaValidacionPracticasPage() {
 
   const esAsesor = hasRole("asesor");
   const esSecretariaOAdmin = hasRole("secretaria") || hasRole("admin");
+  const colaQueryKey = esAsesor && !esSecretariaOAdmin ? ["practicas-asesor-cola"] : ["practicas-secretaria-cola"];
 
   useEffect(() => {
     if (user && !esSecretariaOAdmin && !esAsesor) {
@@ -314,8 +315,12 @@ export default function SecretariaValidacionPracticasPage() {
   }, [user, esSecretariaOAdmin, esAsesor, router]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["practicas-secretaria-cola"],
-    queryFn: () => practicasApi.secretariaCola().then((r) => r.data.data),
+    queryKey: colaQueryKey,
+    queryFn: () =>
+      (esAsesor && !esSecretariaOAdmin
+        ? practicasApi.asesorCola()
+        : practicasApi.secretariaCola()
+      ).then((r) => r.data.data),
     enabled: esSecretariaOAdmin || esAsesor,
   });
 
@@ -332,7 +337,7 @@ export default function SecretariaValidacionPracticasPage() {
       }),
     onSuccess: () => {
       toast.success("Documento actualizado");
-      qc.invalidateQueries({ queryKey: ["practicas-secretaria-cola"] });
+      qc.invalidateQueries({ queryKey: colaQueryKey });
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e, "Error")),
   });
@@ -350,7 +355,7 @@ export default function SecretariaValidacionPracticasPage() {
       }),
     onSuccess: () => {
       toast.success("Reporte mensual actualizado");
-      qc.invalidateQueries({ queryKey: ["practicas-secretaria-cola"] });
+      qc.invalidateQueries({ queryKey: colaQueryKey });
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e, "Error")),
   });
@@ -387,46 +392,358 @@ export default function SecretariaValidacionPracticasPage() {
       <div className="container max-w-5xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex flex-col gap-2 mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Aprobación de Informes Finales
+            Validación de Prácticas (Asesor)
           </h1>
           <p className="text-muted-foreground max-w-3xl">
-            Informes finales de prácticas pendientes de tu firma de aprobación.
+            Reportes mensuales y cierre de informe final solo de tus prácticas asignadas.
           </p>
         </div>
 
-        <Card className="border-border/50 shadow-sm overflow-hidden">
-          <CardHeader className="bg-muted/30 border-b">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              Informes pendientes de aprobación
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            {informesPendientes.length === 0 ? (
-              <div className="text-center py-12 px-4 rounded-lg bg-muted/20 border border-dashed">
-                <CheckCircle2 className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-muted-foreground font-medium">
-                  No hay informes finales pendientes de aprobación en este
-                  momento.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {informesPendientes.map((p) => (
-                  <AsesorInformeCard
-                    key={String(p.id)}
-                    practica={p}
-                    onSuccess={() =>
-                      qc.invalidateQueries({
-                        queryKey: ["practicas-secretaria-cola"],
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="space-y-8">
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CalendarClock className="h-5 w-5 text-primary" />
+                Reportes mensuales pendientes
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              {reportes.length === 0 ? (
+                <div className="text-center py-10 px-4 rounded-lg bg-muted/20 border border-dashed">
+                  <CheckCircle2 className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+                  <p className="text-muted-foreground font-medium">
+                    No hay reportes mensuales pendientes.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {reportes.map((rep: Record<string, unknown>) => {
+                    const pr = rep.practica as
+                      | Record<string, unknown>
+                      | undefined;
+                    const est = pr?.estudiante as
+                      | Record<string, unknown>
+                      | undefined;
+                    const u = est?.usuario as Record<string, unknown> | undefined;
+                    const nombre = u ? `${u.nombres} ${u.apellidos}` : "—";
+                    const repId = rep.id as number;
+                    const practicaId = rep.practica_id as number;
+                    const key = `rep:${repId}`;
+                    const obs = obsByKey[key] ?? "";
+                    const anio = rep.anio as number;
+                    const mesNum = rep.mes as number;
+                    const etiquetaPeriodo = `${mesNombre(mesNum)} ${anio}`;
+
+                    return (
+                      <div
+                        key={key}
+                        className="flex flex-col lg:flex-row gap-6 border rounded-xl p-5 bg-card shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex-1 space-y-4">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800 capitalize"
+                            >
+                              Mes: {etiquetaPeriodo}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground ml-auto font-medium">
+                              Rep #{repId} · Práctica #{practicaId}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h3 className="font-semibold text-lg flex items-center gap-2 text-foreground">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              {nombre}
+                            </h3>
+                          </div>
+
+                          <div className="bg-muted/30 p-3 rounded-lg border border-border/50 text-sm text-muted-foreground leading-relaxed">
+                            <CalendarClock className="h-4 w-4 inline mr-1.5 mb-0.5 text-primary/60" />
+                            {describeReporteMensual(rep)}
+                          </div>
+
+                          {typeof rep.archivo_url === "string" &&
+                            rep.archivo_url && (
+                              <div className="pt-2">
+                                <a
+                                  href={rep.archivo_url as string}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-primary hover:text-primary/80 hover:underline font-medium inline-flex items-center gap-2 text-sm bg-primary/10 px-4 py-2 rounded-lg transition-colors"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                  Ver PDF del Reporte
+                                  <ExternalLink className="h-3.5 w-3.5 ml-1" />
+                                </a>
+                              </div>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col gap-3 w-full lg:w-[320px] lg:border-l lg:pl-6">
+                          <div className="hidden lg:flex justify-end mb-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              asChild
+                              className="w-full shadow-sm"
+                            >
+                              <Link
+                                href={`/practicas/expediente/${pr?.postulacion_id as number}`}
+                              >
+                                <Briefcase className="h-4 w-4 mr-2" />
+                                Ver Expediente
+                              </Link>
+                            </Button>
+                          </div>
+
+                          <div className="space-y-1 mt-auto">
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Observaciones (opcional)
+                            </label>
+                            <Textarea
+                              placeholder="Nota al estudiante..."
+                              value={obs}
+                              onChange={(e) =>
+                                setObsByKey((s) => ({
+                                  ...s,
+                                  [key]: e.target.value,
+                                }))
+                              }
+                              className="resize-none h-20 text-sm focus-visible:ring-primary/50"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <Button
+                              size="sm"
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                              disabled={mValidarRep.isPending}
+                              onClick={() =>
+                                mValidarRep.mutate({
+                                  practicaId,
+                                  reporteId: repId,
+                                  validado: true,
+                                  observaciones: obs || undefined,
+                                })
+                              }
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                              Validar Horas
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="w-full shadow-sm"
+                              disabled={mValidarRep.isPending}
+                              onClick={() =>
+                                mValidarRep.mutate({
+                                  practicaId,
+                                  reporteId: repId,
+                                  validado: false,
+                                  observaciones: obs || "Revisar reporte mensual",
+                                })
+                              }
+                            >
+                              <XCircle className="h-4 w-4 mr-1.5" />
+                              Observar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileWarning className="h-5 w-5 text-primary" />
+                Documentos (informe final) sin validar
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              {docs.length === 0 ? (
+                <div className="text-center py-10 px-4 rounded-lg bg-muted/20 border border-dashed">
+                  <CheckCircle2 className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+                  <p className="text-muted-foreground font-medium">
+                    No hay documentos pendientes.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {docs.map((d: Record<string, unknown>) => {
+                    const pr = d.practica as Record<string, unknown> | undefined;
+                    const est = pr?.estudiante as Record<string, unknown> | undefined;
+                    const u = est?.usuario as Record<string, unknown> | undefined;
+                    const nombre =
+                      u ? `${u.nombres} ${u.apellidos}` : "—";
+                    const docId = d.id as number;
+                    const key = `doc:${docId}`;
+                    const obs = obsByKey[key] ?? "";
+
+                    return (
+                      <div
+                        key={key}
+                        className="flex flex-col lg:flex-row gap-6 border rounded-xl p-5 bg-card shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex-1 space-y-4">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                            >
+                              {docTipoLabel[String(d.tipo)] || String(d.tipo)}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground ml-auto font-medium">
+                              Doc #{docId} · Práctica #{String(d.practica_id)}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h3 className="font-semibold text-lg flex items-center gap-2 text-foreground">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              {nombre}
+                            </h3>
+                          </div>
+
+                          <div className="bg-muted/30 p-3 rounded-lg border border-border/50 text-sm text-muted-foreground leading-relaxed">
+                            <AlertCircle className="h-4 w-4 inline mr-1.5 mb-0.5 text-primary/60" />
+                            {describeDocumentoPractica(d)}
+                          </div>
+
+                          {typeof d.archivo_url === "string" && d.archivo_url && (
+                            <div className="pt-2">
+                              <a
+                                href={d.archivo_url as string}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-primary hover:text-primary/80 hover:underline font-medium inline-flex items-center gap-2 text-sm bg-primary/10 px-4 py-2 rounded-lg transition-colors"
+                              >
+                                <FileText className="h-4 w-4" />
+                                Ver Archivo Adjunto
+                                <ExternalLink className="h-3.5 w-3.5 ml-1" />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-3 w-full lg:w-[320px] lg:border-l lg:pl-6">
+                          <div className="hidden lg:flex justify-end mb-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              asChild
+                              className="w-full shadow-sm"
+                            >
+                              <Link
+                                href={`/practicas/expediente/${pr?.postulacion_id as number}`}
+                              >
+                                <Briefcase className="h-4 w-4 mr-2" />
+                                Ver Expediente
+                              </Link>
+                            </Button>
+                          </div>
+
+                          <div className="space-y-1 mt-auto">
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Observaciones (opcional)
+                            </label>
+                            <Textarea
+                              placeholder="Nota al estudiante..."
+                              value={obs}
+                              onChange={(e) =>
+                                setObsByKey((s) => ({
+                                  ...s,
+                                  [key]: e.target.value,
+                                }))
+                              }
+                              className="resize-none h-20 text-sm focus-visible:ring-primary/50"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <Button
+                              size="sm"
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                              disabled={mValidarDoc.isPending}
+                              onClick={() =>
+                                mValidarDoc.mutate({
+                                  practicaId: d.practica_id as number,
+                                  documentoId: docId,
+                                  validado: true,
+                                  observaciones: obs || undefined,
+                                })
+                              }
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                              Válido
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="w-full shadow-sm"
+                              disabled={mValidarDoc.isPending}
+                              onClick={() =>
+                                mValidarDoc.mutate({
+                                  practicaId: d.practica_id as number,
+                                  documentoId: docId,
+                                  validado: false,
+                                  observaciones: obs || "Revisar documento",
+                                })
+                              }
+                            >
+                              <XCircle className="h-4 w-4 mr-1.5" />
+                              Observar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+                Informes finales pendientes de aprobación
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              {informesPendientes.length === 0 ? (
+                <div className="text-center py-12 px-4 rounded-lg bg-muted/20 border border-dashed">
+                  <CheckCircle2 className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+                  <p className="text-muted-foreground font-medium">
+                    No hay informes finales pendientes de aprobación en este
+                    momento.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {informesPendientes.map((p) => (
+                    <AsesorInformeCard
+                      key={String(p.id)}
+                      practica={p}
+                      onSuccess={() =>
+                        qc.invalidateQueries({
+                          queryKey: colaQueryKey,
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

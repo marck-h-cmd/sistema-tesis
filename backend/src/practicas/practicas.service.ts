@@ -102,6 +102,97 @@ export class PracticasService {
     });
   }
 
+  async findPendientesAsignacionAsesor() {
+    return this.prisma.practica.findMany({
+      where: {
+        asesor_id: null,
+        estado: {
+          in: [EstadoPractica.plan_pendiente, EstadoPractica.plan_validado],
+        },
+        postulacion: {
+          estado: EstadoPostulacion.aceptado,
+        },
+      },
+      include: practicaFullInclude,
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async asignarAsesor(practicaId: number, asesorId: number) {
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { id: asesorId },
+      select: { id: true },
+    });
+    if (!asesor) {
+      throw new NotFoundException(`Asesor con ID ${asesorId} no encontrado`);
+    }
+
+    const practica = await this.prisma.practica.findUnique({
+      where: { id: practicaId },
+      select: {
+        id: true,
+        asesor_id: true,
+        estado: true,
+        postulacion_id: true,
+        postulacion: {
+          select: {
+            id: true,
+            estado: true,
+          },
+        },
+      },
+    });
+
+    if (!practica) {
+      throw new NotFoundException(`Práctica con ID ${practicaId} no encontrada`);
+    }
+
+    if (practica.asesor_id) {
+      throw new ConflictException('La práctica ya tiene asesor asignado');
+    }
+
+    if (
+      practica.postulacion.estado !== EstadoPostulacion.aceptado &&
+      practica.postulacion.estado !== EstadoPostulacion.en_curso
+    ) {
+      throw new ConflictException('La postulación no está activa');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.asesorPostulacion.upsert({
+        where: { postulacion_id: practica.postulacion_id },
+        update: { asesor_id: asesorId },
+        create: { postulacion_id: practica.postulacion_id, asesor_id: asesorId },
+      });
+
+      await tx.postulacion.update({
+        where: { id: practica.postulacion_id },
+        data: {
+          asesor_academico_id: asesorId,
+          ...(practica.postulacion.estado === EstadoPostulacion.aceptado && {
+            estado: EstadoPostulacion.en_curso,
+          }),
+        },
+      });
+
+      await tx.practica.update({
+        where: { id: practicaId },
+        data: {
+          asesor_id: asesorId,
+          ...(practica.estado === EstadoPractica.plan_pendiente ||
+          practica.estado === EstadoPractica.plan_validado
+            ? { estado: EstadoPractica.en_ejecucion }
+            : {}),
+        },
+      });
+    });
+
+    return this.prisma.practica.findUnique({
+      where: { id: practicaId },
+      include: practicaFullInclude,
+    });
+  }
+
   async findOne(id: number) {
     const practica = await this.prisma.practica.findUnique({
       where: { id },
@@ -711,6 +802,20 @@ export class PracticasService {
       );
     }
   
+    const esAdministrativo =
+      rolesNombres.includes('admin') || rolesNombres.includes('secretaria');
+    if (!esAdministrativo) {
+      const asesor = await this.prisma.asesor.findUnique({
+        where: { usuario_id: usuarioId },
+        select: { id: true },
+      });
+      if (!asesor || practica.asesor_id == null || asesor.id !== practica.asesor_id) {
+        throw new ForbiddenException(
+          'Solo el asesor asignado puede aprobar el informe final de esta práctica.',
+        );
+      }
+    }
+  
     if (practica.estado !== EstadoPractica.informe_pendiente) {
       throw new ConflictException(
         'El informe debe estar pendiente de firma/aprobación del asesor.',
@@ -847,6 +952,54 @@ export class PracticasService {
     };
   }
 
+  async colaAsesor(usuarioId: number) {
+    const asesor = await this.prisma.asesor.findUnique({
+      where: { usuario_id: usuarioId },
+      select: { id: true },
+    });
+    if (!asesor) {
+      throw new NotFoundException('Asesor no encontrado');
+    }
+
+    const [reportes_mensuales_sin_validar, documentos_sin_validar, informes_pendientes_asesor] =
+      await Promise.all([
+        this.prisma.reporteMensualPractica.findMany({
+          where: {
+            validado: false,
+            practica: { asesor_id: asesor.id },
+          },
+          include: { practica: { include: practicaFullInclude } },
+          orderBy: { created_at: 'desc' },
+          take: 200,
+        }),
+        this.prisma.documentoPractica.findMany({
+          where: {
+            validado: false,
+            tipo: TipoDocumentoPractica.informe_final,
+            practica: { asesor_id: asesor.id },
+          },
+          include: { practica: { include: practicaFullInclude } },
+          orderBy: { subido_en: 'desc' },
+          take: 200,
+        }),
+        this.prisma.practica.findMany({
+          where: {
+            asesor_id: asesor.id,
+            estado: EstadoPractica.informe_pendiente,
+          },
+          include: practicaFullInclude,
+          orderBy: { informe_final_subido_en: 'desc' },
+          take: 200,
+        }),
+      ]);
+
+    return {
+      reportes_mensuales_sin_validar,
+      documentos_sin_validar,
+      informes_pendientes_asesor,
+    };
+  }
+
   async updateAdmin(id: number, dto: UpdatePracticaAdminDto) {
     await this.findOne(id);
     const data: Record<string, unknown> = {};
@@ -881,14 +1034,47 @@ export class PracticasService {
     practicaId: number,
     documentoId: number,
     validadorUsuarioId: number,
+    userRoles: string[] | undefined,
     dto: ValidarDocumentoPracticaDto,
   ) {
     const doc = await this.prisma.documentoPractica.findFirst({
       where: { id: documentoId, practica_id: practicaId },
+      include: { practica: { select: { asesor_id: true } } },
     });
     if (!doc) {
       throw new NotFoundException('Documento no encontrado');
     }
+
+    const roles = userRoles ?? [];
+    const esAdministrativo =
+      roles.includes(RolNombre.admin) ||
+      roles.includes(RolNombre.secretaria) ||
+      roles.includes(RolNombre.coordinador);
+
+    if (!esAdministrativo) {
+      const asesor = await this.prisma.asesor.findUnique({
+        where: { usuario_id: validadorUsuarioId },
+        select: { id: true },
+      });
+
+      const esAsesorAsignado =
+        asesor != null &&
+        doc.practica.asesor_id != null &&
+        asesor.id === doc.practica.asesor_id;
+
+      if (!esAsesorAsignado) {
+        throw new ForbiddenException(
+          'Solo el asesor asignado o personal administrativo puede validar documentos de la práctica.',
+        );
+      }
+
+      if (doc.tipo !== TipoDocumentoPractica.informe_final) {
+        throw new ForbiddenException(
+          'El asesor solo puede validar documentos de tipo informe final.',
+        );
+      }
+    }
+
     return this.prisma.documentoPractica.update({
       where: { id: documentoId },
       data: {
